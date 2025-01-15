@@ -1,6 +1,6 @@
 # express-pack
 
-![Express-Pack Logo](https://i.ibb.co/T4TpXH1/logo.png) <!-- Replace with actual logo if available -->
+![Express-Pack Logo](https://i.ibb.co/2g7xmpB/Modern-Educational-Logo-Template.png) <!-- Replace with actual logo if available -->
 
 [![npm version](https://img.shields.io/npm/v/express-pack.svg)](https://www.npmjs.com/package/express-pack)
 [![License](https://img.shields.io/npm/l/express-pack.svg)](https://github.com/your-repo/express-pack/blob/main/LICENSE)
