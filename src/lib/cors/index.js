@@ -1,5 +1,5 @@
 const cors = require("cors");
-const { corsConfig } = require("./config");
+const corsConfig = require("./config");
 
 /**
  * Cors class used to setup the cors origin
@@ -19,7 +19,7 @@ class Cors {
    * @param {*} customConfig config for cors
    */
   setupCors(app, customConfig = {}) {
-    this.customConfig = customConfig;
+    this.customConfig = corsConfig.getConfig(customConfig);
 
     // if we get custom config then get the cors config or else use deafult
     const config = Object.keys(customConfig)?.length

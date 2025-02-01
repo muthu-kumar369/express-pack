@@ -62,16 +62,119 @@ app?.listen(3000, () => {
 
 ### Customize your application behavior with the `appConfig` object.
 
+### Example Configuration:
+
+
+✅ Easily create a new Express app
+
+✅ Automatically apply a pre-configured with standard default settings
+
+✅ Set up essential middleware for CORS, logging, body parsing, and security
+
 ```javascript
 module.exports = {
   appConfig: {
-    env: "", // Environment variable (dotenv)
-    cors: {}, // CORS settings for cross-origin requests
-    logger: {}, // Logger configuration ( Winston configuration)
-    bodyParser: {}, // Body parser settings for handling request bodies
-    security: {}, // Security-related configurations (Helmet)
+    env: "development", // custom path for .env file
+    cors: {}, // CORS settings
+    logger: {}, // Logger configuration
+    bodyParser: {}, // Body parser settings
+    security: {}, // Security configurations
   },
 };
+```
+
+---
+
+## 📌 Configuration Options
+
+### **Body Parser Configuration**
+
+Handles request body parsing.
+
+| Option       | Default Value                                          | Description               |
+| ------------ | ------------------------------------------------------ | ------------------------- |
+| `json`       | `{ limit: "100kb" }`                                   | Limits JSON body size     |
+| `urlencoded` | `{ extended: true, limit: "100kb" }`                   | Parses URL-encoded bodies |
+| `raw`        | `{ type: "application/octet-stream", limit: "100kb" }` | Parses raw binary data    |
+| `text`       | `{ type: "text/plain", limit: "100kb" }`               | Parses plain text         |
+
+**Example Usage:**
+
+```javascript
+bodyParser: {
+  json: { limit: "1mb" },
+  urlencoded: { extended: true, limit: "500kb" },
+},
+```
+
+---
+
+### **CORS Configuration**
+
+Manages cross-origin resource sharing.
+
+| Option              | Default Value                                       | Description                          |
+| ------------------- | --------------------------------------------------- | ------------------------------------ |
+| `methods`           | `["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE"]` | Allowed HTTP methods                 |
+| `allowedHeaders`    | `undefined`                                         | Headers allowed from requests        |
+| `exposedHeaders`    | `[]`                                                | Custom headers exposed to client     |
+| `credentials`       | `false`                                             | Allows sending cookies               |
+| `maxAge`            | `86400`                                             | Cache preflight requests             |
+| `preflightContinue` | `false`                                             | Pass preflight responses to handlers |
+
+**Example Usage:**
+
+```javascript
+cors: {
+  methods: ["GET", "POST"],
+  credentials: true,
+},
+```
+
+---
+
+### **Logger Configuration**
+
+Handles application logging using Winston.
+
+| Option        | Default Value         | Description         |
+| ------------- | --------------------- | ------------------- |
+| `level`       | `"info"`              | Logging level       |
+| `format`      | `timestamp + message` | Log format          |
+| `transports`  | `[Console, File]`     | Output destinations |
+| `exitOnError` | `false`               | Exit on error       |
+
+**Example Usage:**
+
+```javascript
+logger: {
+  level: "debug",
+  transports: [new transports.Console()],
+},
+```
+
+---
+
+### **Security Configuration**
+
+Enhances security with Helmet.js settings.
+
+| Option                  | Default Value   | Description                    |
+| ----------------------- | --------------- | ------------------------------ |
+| `contentSecurityPolicy` | `false`         | Enables CSP headers            |
+| `dnsPrefetchControl`    | `true`          | Controls DNS prefetching       |
+| `frameguard`            | `"sameorigin"`  | Prevents clickjacking          |
+| `hsts`                  | `{ maxAge: 0 }` | HTTP Strict Transport Security |
+| `noSniff`               | `false`         | Prevents MIME sniffing         |
+| `xssFilter`             | `true`          | Enables XSS protection         |
+
+**Example Usage:**
+
+```javascript
+security: {
+  hsts: { maxAge: 31536000 },
+  xssFilter: false,
+},
 ```
 
 ## **routeConfig.js**

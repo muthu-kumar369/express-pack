@@ -1,5 +1,5 @@
 const { createLogger, format, transports } = require("winston");
-const { logConfig } = require("./config");
+const logConfig = require("./config");
 
 /**
  * Logger class that used to create logs for application
@@ -8,7 +8,7 @@ class Logger {
   logger;
 
   constructor() {
-    this.logger = createLogger(logConfig);
+    this.logger = createLogger(logConfig.getConfig());
   }
   /**
    * Used to create logger
@@ -18,7 +18,7 @@ class Logger {
    */
   CreateLogger(app, customConfig = {}) {
     if (Object.keys(customConfig)?.length > 0) {
-      const config = { ...logConfig, ...customConfig };
+      const config = logConfig.getConfig(customConfig);
       this.logger = createLogger(config);
     }
     app.use((req, res, next) => {

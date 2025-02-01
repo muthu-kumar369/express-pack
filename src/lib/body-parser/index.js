@@ -11,7 +11,7 @@ class BodyParser {
    * @param {*} customConfig user config details for body parser
    */
   setupBodyParser(app, customConfig) {
-    const config = { ...parserConfig?.config, ...customConfig };
+    const config = parserConfig.getConfig(customConfig);
 
     // allow json input
     app.use(bodyParser.json(config?.json));
