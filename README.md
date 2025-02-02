@@ -130,6 +130,8 @@ app?.listen(3000, () => {
 });
 ```
 
+## Configuration
+
 #### **config/appConfig.js**
 
 ### Customize your application behavior with the `appConfig` object.
@@ -247,6 +249,33 @@ security: {
   xssFilter: false,
 },
 ```
+
+### **Compression Configuration**
+
+Optimizes server performance by compressing HTTP responses.
+
+| Option      | Default Value | Description                                                                       |
+| ----------- | ------------- | --------------------------------------------------------------------------------- |
+| `level`     | `6`           | Compression level (0-9) for Gzip. Higher values result in better compression.     |
+| `threshold` | `1024`        | Only compress responses larger than 1KB. Smaller responses are sent uncompressed. |
+| `filter`    | `Function`    | A function to determine whether to apply compression based on request/response.   |
+
+**Example Usage:**
+
+```javascript
+compression: {
+  level: 9,
+  threshold: 2048,
+  filter: (req, res) => {
+    if (req.headers["x-no-compression"]) {
+      return false; // Skip compression if client requests no compression
+    }
+    return compression.filter(req, res); // Default compression filter
+  },
+},
+```
+
+## Router configuration
 
 #### **config/routeConfig.js**
 
