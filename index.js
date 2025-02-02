@@ -1,5 +1,7 @@
+const compression = require("compression");
 const { CreateApp, Router, BindRoutes } = require("./src/index");
 const { SetupBodyParser } = require("./src/lib/body-parser");
+const { SetupCompression } = require("./src/lib/compression");
 const { SetupCors } = require("./src/lib/cors");
 const { LoadEnv } = require("./src/lib/dotenv");
 const {
@@ -10,7 +12,7 @@ const {
 } = require("./src/lib/logger");
 const { SetupSecurity } = require("./src/lib/security");
 
-module.exports = {
+module.exports = {  
   CreateApp,
   Router: Router(),
   BindRoutes,
@@ -22,4 +24,6 @@ module.exports = {
   SetupBodyParser,
   SetupCors,
   SetupSecurity,
+  SetupCompression,
+  compression,
 };

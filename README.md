@@ -28,15 +28,87 @@ Install the package using npm or yarn:
 
 npm install express-pack
 
-# or
+## or
 
 yarn add express-pack
 
-# 🛠️ Usage
+## 🛠️ Usage
 
-Here’s how you can set up and start using `express-pack`:
+## Project Setup Guide
 
-## **index.js / server.js**
+## ⚙️ Easy Setup Instructions
+
+After installation, when you run the setup, you will be prompted with configuration questions.
+
+### 1️⃣ Enable Nodemon for Development
+
+```basg
+Do you want to use nodemon for development? (yes/no)
+
+- **Yes** → Adds a dev script using nodemon.
+- **No** → Uses node directly.
+
+```
+
+### 2️⃣ Generate Basic Express App Structure
+
+```bash
+Do you want to set up the basic Express app structure? (yes/no)
+
+- **Yes** → Automatically creates a structured Express.js app with controllers, routes, and configuration files.
+- **No** → Skips the setup and allows manual configuration.
+
+```
+
+## 📂 Project Structure
+
+If you choose to set up the Express app, the following directory structure will be created:
+
+```bash
+/project-root
+  ├── /src
+  │    ├── /featureName1
+  │    │    ├── /controllers
+  │    │    ├── /routes
+  │    │
+  │    ├── /featureName2
+  │    │    ├── /controllers
+  │    │    ├── /routes
+  ├── /config
+  │    ├── appConfig.js
+  │    └── routeConfig.js
+  ├── index.js
+  ├── package.json
+  └── .env
+```
+
+## 🚀 Running the Application
+
+After setup, you can start the application using:
+
+```sh
+npm run dev   # If nodemon is enabled
+npm start     # Runs the app with node
+```
+
+## 🛠️ Configuration Files
+
+- **config/appConfig.js** - Contains Express middleware configurations.
+- **config/routeConfig.js** - Manages the routes for the application.
+
+## ✨ Features
+
+✅ Automatic project structure generation
+
+✅ Support for nodemon for development
+
+✅ Follows MVC architecture for clean code organization
+
+✅ Quick setup with interactive prompts
+
+## Here’s how you can set up manualy and start using `express-pack`:
+
+#### **index.js / server.js**
 
 ```javascript
 const { CreateApp, BindRoutes } = require("express-pack");
@@ -58,12 +130,11 @@ app?.listen(3000, () => {
 });
 ```
 
-## **appConfig.js**
+#### **config/appConfig.js**
 
 ### Customize your application behavior with the `appConfig` object.
 
 ### Example Configuration:
-
 
 ✅ Easily create a new Express app
 
@@ -177,7 +248,7 @@ security: {
 },
 ```
 
-## **routeConfig.js**
+#### **config/routeConfig.js**
 
 ### Organize your routes easily with the `routes` array.
 

@@ -4,6 +4,7 @@ const { SetupCors } = require("./lib/cors");
 const { LoadEnv } = require("./lib/dotenv");
 const { CreateLogger } = require("./lib/logger");
 const { SetupSecurity } = require("./lib/security");
+const { SetupCompression } = require("./lib/compression");
 
 /**
  * Class that have method which is provided from Express pack
@@ -60,6 +61,10 @@ class ExpressPack {
 
       case "security":
         SetupSecurity(this.app, value);
+        break;
+
+      case "compression":
+        SetupCompression(this.app, value);
         break;
     }
   }
