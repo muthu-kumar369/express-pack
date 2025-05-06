@@ -1,5 +1,5 @@
 const bodyParser = require("body-parser");
-const parserConfig = require("./config");
+const parserConfig = require("../../util/config/bodyParserConfig");
 
 /**
  * BodyParser class used to setup body parser for app

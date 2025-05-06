@@ -1,5 +1,5 @@
 const cors = require("cors");
-const corsConfig = require("./config");
+const corsConfig = require("../../util/config/corsConfig");
 
 /**
  * Cors class used to setup the cors origin

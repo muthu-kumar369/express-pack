@@ -11,7 +11,7 @@ const {
   routeConfigJsContent,
   indexJsContent,
   appConfigJsContent,
-} = require("../config/fileContent");
+} = require("../util/config/fileContent");
 
 // Get the project's package.json path
 const projectPackageJsonPath = path.resolve(process.cwd(), "package.json");

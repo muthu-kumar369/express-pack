@@ -1,5 +1,5 @@
 const { createLogger, format, transports } = require("winston");
-const logConfig = require("./config");
+const logConfig = require("../../util/config/winstonConfig");
 
 /**
  * Logger class that used to create logs for application

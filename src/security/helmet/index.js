@@ -1,5 +1,5 @@
 const helmet = require("helmet");
-const securityConfig = require("./config");
+const securityConfig = require("../../util/config/helmetConfig");
 
 /**
  * Security classs used to setup the security with express app

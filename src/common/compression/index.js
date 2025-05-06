@@ -1,5 +1,5 @@
 const compression = require("compression");
-const { getConfig } = require("./config");
+const { getConfig } = require("../../util/config/compressionConfig");
 
 /**
  * Used to setup compress middleware in express

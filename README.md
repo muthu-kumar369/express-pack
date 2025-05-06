@@ -36,7 +36,7 @@ yarn add express-pack
 
 ## Project Setup Guide
 
-## ⚙️ Easy Setup Instructions
+<!-- ## ⚙️ Easy Setup Instructions
 
 After installation, when you run the setup, you will be prompted with configuration questions.
 
@@ -58,7 +58,7 @@ Do you want to set up the basic Express app structure? (yes/no)
 - **Yes** → Automatically creates a structured Express.js app with controllers, routes, and configuration files.
 - **No** → Skips the setup and allows manual configuration.
 
-```
+``` -->
 
 ## 📂 Project Structure
 

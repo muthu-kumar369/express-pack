@@ -1,16 +1,16 @@
 const compression = require("compression");
 const { CreateApp, Router, BindRoutes } = require("./src/index");
-const { SetupBodyParser } = require("./src/lib/body-parser");
-const { SetupCompression } = require("./src/lib/compression");
-const { SetupCors } = require("./src/lib/cors");
-const { LoadEnv } = require("./src/lib/dotenv");
+const { SetupBodyParser } = require("./src/common/body-parser");
+const { SetupCompression } = require("./src/common/compression");
+const { SetupCors } = require("./src/common/cors");
+const { LoadEnv } = require("./src/common/dotenv");
 const {
   logger,
   CreateLogger,
   LogFormat,
   LogTransport,
-} = require("./src/lib/logger");
-const { SetupSecurity } = require("./src/lib/security");
+} = require("./src/logger/winston");
+const { SetupSecurity } = require("./src/security/helmet");
 
 module.exports = {  
   CreateApp,

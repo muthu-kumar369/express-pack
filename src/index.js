@@ -1,10 +1,11 @@
 const express = require("express");
-const { SetupBodyParser } = require("./lib/body-parser");
-const { SetupCors } = require("./lib/cors");
-const { LoadEnv } = require("./lib/dotenv");
-const { CreateLogger } = require("./lib/logger");
-const { SetupSecurity } = require("./lib/security");
-const { SetupCompression } = require("./lib/compression");
+const { SetupBodyParser } = require("./common/body-parser");
+const { SetupCors } = require("./common/cors");
+const { LoadEnv } = require("./common/dotenv");
+const { CreateLogger } = require("./logger/winston");
+const { SetupSecurity } = require("./security/helmet");
+const { SetupCompression } = require("./common/compression");
+const { globalErrorHandler } = require("./error/error-handler");
 
 /**
  * Class that have method which is provided from Express pack
@@ -26,6 +27,8 @@ class ExpressPack {
     this.app.use((req, res, next) => {
       next();
     });
+
+    // this.app.use(globalErrorHandler);
 
     // apply middleware based on given config
     if (Object.keys(appConfig)?.length) {
