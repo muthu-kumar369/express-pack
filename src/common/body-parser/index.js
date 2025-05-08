@@ -1,16 +1,16 @@
-const bodyParser = require("body-parser");
-const parserConfig = require("../../util/config/bodyParserConfig");
+import bodyParser from "body-parser";
+import parserConfig from "../../config/common/bodyParserConfig.js";
 
 /**
  * BodyParser class used to setup body parser for app
  */
-class BodyParser {
+export class BodyParser {
   /**
    * Used to setup body parser for app
    * @param {*} app Express app
    * @param {*} customConfig user config details for body parser
    */
-  setupBodyParser(app, customConfig) {
+  static setupBodyParser({ app, customConfig = {} }) {
     const config = parserConfig.getConfig(customConfig);
 
     // allow json input
@@ -26,10 +26,3 @@ class BodyParser {
     app.use(bodyParser.text(config?.text));
   }
 }
-
-// create intannce
-const instance = new BodyParser();
-
-module.exports = {
-  SetupBodyParser: instance.setupBodyParser,
-};

@@ -1,4 +1,4 @@
-module.exports = {
+const config = {
   corsConfig: {
     origin: (origin, callback) => {
       callback(null, true);
@@ -33,3 +33,5 @@ module.exports = {
     };
   },
 };
+
+export default config;

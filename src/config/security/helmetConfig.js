@@ -1,4 +1,4 @@
-module.exports = {
+const config = {
   securityConfig: {
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
@@ -34,3 +34,5 @@ module.exports = {
     };
   },
 };
+
+export default config;

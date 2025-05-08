@@ -1,4 +1,4 @@
-module.exports = {
+const config = {
   config: {
     json: { limit: "100kb" }, // Default JSON body limit
     urlencoded: { extended: true, limit: "100kb" }, // URL-encoded body
@@ -14,3 +14,5 @@ module.exports = {
     };
   },
 };
+
+export default config;

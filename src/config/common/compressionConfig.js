@@ -1,6 +1,6 @@
-const compression = require("compression");
+import compression from "compression";
 
-module.exports = {
+const config = {
   getConfig: (config = {}) => {
     return {
       level: config?.level || 6, // Compression level (0-9) for Gzip
@@ -16,3 +16,5 @@ module.exports = {
     };
   },
 };
+
+export default config;

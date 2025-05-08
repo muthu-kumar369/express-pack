@@ -1,29 +1,22 @@
-const compression = require("compression");
-const { getConfig } = require("../../util/config/compressionConfig");
+import compression from "compression";
+import compressConfig from "../../config/common/compressionConfig.js";
 
 /**
  * Used to setup compress middleware in express
  */
-class Compression {
+export class CompressionHandler {
   /**
    * @param {*} app Express app
    * @param {*} customConfig Custome configuration for compress
    */
-  setupCompress(app, customConfig) {
-    const config = getConfig(customConfig);
+  static setupCompress({ app, customConfig = {} }) {
+    const config = compressConfig.getConfig(customConfig);
 
     // use compress with config details
     app.use(compression(config));
   }
 
-  compression() {
+  static compression() {
     return compression;
   }
 }
-
-const instance = new Compression();
-
-module.exports = {
-  SetupCompression: instance.setupCompress,
-  compression: instance.compression,
-};

@@ -1,7 +1,5 @@
-const { logger } = require("../../..");
-
-class ErrorHandler {
-  globalErrorHandler(err, req, res, next) {
+export class ErrorHandler {
+  static handleGlobalError(err, req, res, next) {
     console.error(err);
 
     return res.status(500).json({
@@ -10,7 +8,7 @@ class ErrorHandler {
     });
   }
 
-  processErrorHandler() {
+  static handleProcessError() {
     process.on("uncaughtException", (err) => {
       console.error("🔥 Uncaught Exception:", err);
       process.exit(1);
@@ -31,12 +29,11 @@ class ErrorHandler {
       process.exit(0);
     });
   }
+
+  static handleNotFoundRoute(req, res, next) {
+    return res.status(400).json({
+      status: "error",
+      message: "Route not found!",
+    });
+  }
 }
-
-// instance
-const instance = new ErrorHandler();
-
-module.exports = {
-  globalErrorHandler: instance.globalErrorHandler,
-  processErrorHandler: instance.processErrorHandler,
-};

@@ -1,10 +1,10 @@
-const { createLogger, format, transports } = require("winston");
-const logConfig = require("../../util/config/winstonConfig");
+import { createLogger, format, transports } from "winston";
+import logConfig from "../../config/logger/winstonConfig.js";
 
 /**
  * Logger class that used to create logs for application
  */
-class Logger {
+export class LoggerHandler {
   logger;
 
   constructor() {
@@ -16,13 +16,17 @@ class Logger {
    * @param {*} customConfig Custom config for logger if they need additionally
    * @returns Logger
    */
-  CreateLogger(app, customConfig = {}) {
+  CreateLogger({ app, customConfig = {} }) {
     if (Object.keys(customConfig)?.length > 0) {
       const config = logConfig.getConfig(customConfig);
       this.logger = createLogger(config);
     }
     app.use((req, res, next) => {
-      this.logger.info(`${req.method} ${req.url} - ${req.ip}`);
+      this.logger.info(
+        `${req.method} ${req.url} - ${req.ip}, ${
+          req?.requestId ? "Request id: " + req.requestId : null
+        }`
+      );
       next();
     });
     return this.logger;
@@ -56,14 +60,3 @@ class Logger {
     return transports;
   }
 }
-
-// create instance for class
-const instance = new Logger();
-
-// export winston methods
-module.exports = {
-  CreateLogger: instance.CreateLogger.bind(instance),
-  logger: instance.getLogger.bind(instance),
-  LogFormat: instance.getLogFormat(),
-  LogTransport: instance.getLogTransport(),
-};

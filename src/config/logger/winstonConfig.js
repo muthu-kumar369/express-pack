@@ -1,8 +1,8 @@
-const { format, transports } = require("winston");
-const DailyRotateFile = require("winston-daily-rotate-file");
-const path = require("path");
+import { format, transports } from "winston";
+import DailyRotateFile from "winston-daily-rotate-file";
+import path from "path";
 
-module.exports = {
+const config = {
   logConfig: {
     level: "info",
     format: format.combine(
@@ -58,3 +58,5 @@ module.exports = {
     };
   },
 };
+
+export default config;

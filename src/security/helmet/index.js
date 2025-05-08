@@ -1,10 +1,10 @@
-const helmet = require("helmet");
-const securityConfig = require("../../util/config/helmetConfig");
+import helmet from "helmet";
+import securityConfig from "../../config/security/helmetConfig.js";
 
 /**
  * Security classs used to setup the security with express app
  */
-class Security {
+export class SecurityHandler {
   config;
 
   constructor() {
@@ -15,15 +15,8 @@ class Security {
    * @param {*} app Express app
    * @param {*} customConfig custom configuration if modification needed
    */
-  setupSecurity(app, customConfig = {}) {
+  static setupSecurity({ app, customConfig = {} }) {
     this.config = securityConfig?.getConfig(customConfig);
     app.use(helmet(this.config));
   }
 }
-
-// create instance
-const instance = new Security();
-
-module.exports = {
-  SetupSecurity: instance.setupSecurity.bind(instance),
-};

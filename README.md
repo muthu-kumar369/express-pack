@@ -300,7 +300,7 @@ module.exports = {
 
 ```javascript
 const { Router } = require("express-pack");
-const TestController = require("../controller/index");
+const TestController = require("../controller/index.js");
 
 // Define a GET endpoint for health checks or basic operations
 Router.get("/health-check", TestController.testMethod);

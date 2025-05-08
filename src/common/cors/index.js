@@ -1,10 +1,10 @@
-const cors = require("cors");
-const corsConfig = require("../../util/config/corsConfig");
+import cors from "cors";
+import corsConfig from "../../config/common/corsConfig.js";
 
 /**
  * Cors class used to setup the cors origin
  */
-class Cors {
+export class Cors {
   // variable that used around the class
   defaultConfig;
   customConfig;
@@ -18,7 +18,7 @@ class Cors {
    * @param {*} app Express app
    * @param {*} customConfig config for cors
    */
-  setupCors(app, customConfig = {}) {
+  static setupCors({ app, customConfig = {} }) {
     this.customConfig = corsConfig.getConfig(customConfig);
 
     // if we get custom config then get the cors config or else use deafult
@@ -33,7 +33,7 @@ class Cors {
    * Used to check allow origin, block origin and return the config
    * @returns config details for cors
    */
-  getCorsConfig() {
+  static getCorsConfig() {
     const {
       allowOrigins = [],
       blockOrigins = [],
@@ -45,14 +45,16 @@ class Cors {
       if (!origin) return callback(null, true);
 
       // Blocklisted origins
-      if (blockOrigins.some((blocked) => this.matchOrigin(origin, blocked))) {
+      if (
+        blockOrigins.some((blocked) => this.matchOrigin({ origin, blocked }))
+      ) {
         return callback(new Error("Blocked by CORS policy"));
       }
 
       // Allowlisted origins
       if (
         allowOrigins.length === 0 ||
-        allowOrigins.some((allowed) => this.matchOrigin(origin, allowed))
+        allowOrigins.some((allowed) => this.matchOrigin({ origin, allowed }))
       ) {
         return callback(null, true);
       }
@@ -74,16 +76,9 @@ class Cors {
    * @param {*} pattern Pattern or origin to validate
    * @returns
    */
-  matchOrigin(origin, pattern) {
+  static matchOrigin({ origin, pattern }) {
     if (typeof pattern === "string") return origin === pattern;
     if (pattern instanceof RegExp) return pattern.test(origin);
     return false;
   }
 }
-
-// create instance
-const instance = new Cors();
-
-module.exports = {
-  SetupCors: instance.setupCors.bind(instance),
-};

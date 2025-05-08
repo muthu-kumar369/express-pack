@@ -1,7 +1,7 @@
 module.exports = {
   testRouterContent: `
     const { Router } = require("express-pack");
-    const TestController = require("../controller/index");
+    const TestController = require("../controller/index.js");
     
     Router.get("/status-check", TestController.status);
     Router.post("/post-status", TestController.postStatus);
