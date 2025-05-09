@@ -4,7 +4,7 @@ import compressConfig from "../../config/common/compressionConfig.js";
 /**
  * Used to setup compress middleware in express
  */
-export class CompressionHandler {
+class CompressionHandler {
   /**
    * @param {*} app Express app
    * @param {*} customConfig Custome configuration for compress
@@ -20,3 +20,5 @@ export class CompressionHandler {
     return compression;
   }
 }
+
+export default CompressionHandler;

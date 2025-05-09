@@ -1,4 +1,4 @@
-module.exports = {
+const config = {
   testRouterContent: `
     const { Router } = require("express-pack");
     const TestController = require("../controller/index.js");
@@ -65,3 +65,5 @@ module.exports = {
     });
     `,
 };
+
+export default config;
