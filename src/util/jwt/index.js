@@ -14,7 +14,7 @@ export class JWTUtil {
       ? {
           accessToken: jwt.sign(
             tokenPayload?.payload,
-            tokenPayload?.JWT_SECRET || process.env.JWT_SECRET,
+            tokenPayload?.JWT_SECRET || process?.env?.JWT_SECRET,
             {
               expiresIn: tokenPayload?.expiresIn,
             }
@@ -24,7 +24,7 @@ export class JWTUtil {
             ...refreshTokenPayload,
           }),
         }
-      : jwt.sign(payload, JWT_SECRET || process.env.JWT_SECRET, {
+      : jwt.sign(payload, JWT_SECRET || process?.env?.JWT_SECRET, {
           expiresIn,
         });
   }
@@ -41,7 +41,7 @@ export class JWTUtil {
 
   static async verify({ token, JWT_SECRET = "" }) {
     try {
-      return jwt.verify(token, JWT_SECRET || process.env.JWT_SECRET);
+      return jwt.verify(token, JWT_SECRET || process?.env?.JWT_SECRET);
     } catch (err) {
       if (err.name === "TokenExpiredError") throw new TokenExpiredError();
       if (err.name === "JsonWebTokenError") throw new TokenInvalidError();
@@ -72,7 +72,7 @@ export class JWTUtil {
           tokenPayload: {
             payload,
             JWT_SECRET,
-            expiresIn: process.env.ACCESS_TOKEN_EXPIRE_TIME || "25m",
+            expiresIn: process?.env?.ACCESS_TOKEN_EXPIRE_TIME || "25m",
           },
         })
       : null;

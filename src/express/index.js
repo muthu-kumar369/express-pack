@@ -1,35 +1,28 @@
-import { CompressionHandler, RateLimitHandler } from "../../app.js";
+import express from "express";
+import {
+  CompressionHandler,
+  LoggerHandler,
+  RateLimitHandler,
+} from "../../app.js";
 import { BodyParser, Cors, DotEnv } from "../common/index.js";
-import LoggerHandler from "../logger/winston/index.js";
 import { SecurityHandler } from "../security/index.js";
 
-import express from "express";
-
-class ExpressPack {
-  static instance = null;
-  static app = null;
-
-  constructor() {
-    if (ExpressPack.instance) {
-      return ExpressPack.instance;
-    }
-
-    ExpressPack.app = express();
-    ExpressPack.instance = this;
-  }
+export class ExpressPack {
+  static #app = null;
+  static #initialized = false;
 
   /**
-   * Creates or returns the existing app instance with middleware setup
-   * @param {*} config Configuration object for middlewares
+   * Initializes the express app with provided middleware config
+   * @param {*} config Middleware configuration object
    * @returns express app
    */
-  static createApp({ config = {} } = {}) {
-    if (!ExpressPack.instance) {
-      new ExpressPack();
-    }
+  static async init({ config = {} }) {
+    if (this.#initialized) return this.#app;
 
-    // Add request ID tracing middleware once
-    ExpressPack.app.use((req, res, next) => {
+    this.#app = express();
+
+    // Add request ID middleware once
+    this.#app.use((req, res, next) => {
       const requestId =
         req.headers["x-request-id"] ||
         `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -38,86 +31,96 @@ class ExpressPack {
       next();
     });
 
-    // Apply configured middlewares
-    if (Object.keys(config)?.length) {
-      Object.entries(config).forEach(([key, value]) => {
-        ExpressPack.applyMiddleware({ key, value });
-      });
+    for (const [key, value] of Object.entries(config)) {
+      this.#applyMiddleware({ key, value });
     }
 
-    return ExpressPack.app;
+    this.#initialized = true;
+    return this.#app;
   }
 
   /**
-   * Applies a middleware to the app
-   * @param {*} key Middleware key
-   * @param {*} value Middleware config
+   * Middleware dispatcher
    */
-  static applyMiddleware({ key, value }) {
+  static #applyMiddleware({ key, value }) {
     switch (key) {
       case "bodyParser":
-        BodyParser.setupBodyParser({
-          app: ExpressPack.app,
-          customConfig: value,
-        });
+        BodyParser.init({ app: this.#app, customConfig: value });
         break;
 
       case "cors":
-        Cors.setupCors({ app: ExpressPack.app, customConfig: value });
+        Cors.init({ app: this.#app, customConfig: value });
         break;
 
       case "env":
-        DotEnv.loadEnv({ customPath: value });
+        DotEnv.init({ customPath: value });
         break;
 
       case "logger":
-        LoggerHandler.configureLogger(value); // optional custom setup
-        ExpressPack.app.use(LoggerHandler.middleware()); // attach logger
+        LoggerHandler.init(value);
+        this.#app.use(LoggerHandler.middleware());
         break;
 
       case "security":
-        SecurityHandler.setupSecurity({
-          app: ExpressPack.app,
-          customConfig: value,
-        });
+        SecurityHandler.init({ app: this.#app, customConfig: value });
         break;
 
       case "compression":
-        CompressionHandler.setupCompress({
-          app: ExpressPack.app,
+        CompressionHandler.init({
+          app: this.#app,
           customConfig: value,
         });
         break;
 
       case "express-rate-limit":
-        RateLimitHandler.setupRateLimit({
-          app: ExpressPack.app,
+        RateLimitHandler.init({
+          app: this.#app,
           customConfig: value,
         });
         break;
+
+      default:
+        console.warn(`[ExpressPack] Unknown middleware key: ${key}`);
     }
   }
 
   /**
-   * Get new express router
+   * Returns the initialized app instance
    */
-  static getRoute() {
+  static getApp() {
+    if (!this.#initialized) {
+      throw new Error(
+        "Express app not initialized. Call ExpressPack.init() first."
+      );
+    }
+    return this.#app;
+  }
+
+  /**
+   * Returns new Router instance
+   */
+  static getRouter() {
     return express.Router();
   }
 
   /**
-   * Bind multiple routes to the app
-   * @param {Array} routes Array of route config: { path, route }
+   * Binds routes to app after init
+   * @param {Array} routes Array of route config { path, route }
    */
-  static bindRoutes({ routes }) {
-    if (!ExpressPack.app) {
-      throw new Error("App not initialized. Call createApp() first.");
+  static initRoutes({ routes = [] }) {
+    if (!this.#initialized) {
+      throw new Error("Cannot bind routes before app initialization.");
     }
 
-    routes?.forEach((option) => {
-      ExpressPack.app.use(option.path, option.route);
-    });
+    for (const { path, route } of routes) {
+      this.#app.use(path, route);
+    }
+  }
+
+  /**
+   * Check if app is initialized
+   */
+  static isInitialized() {
+    return this.#initialized;
   }
 }
-
-export default ExpressPack;

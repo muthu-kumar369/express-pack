@@ -10,7 +10,7 @@ export class BodyParser {
    * @param {*} app Express app
    * @param {*} customConfig user config details for body parser
    */
-  static setupBodyParser({ app, customConfig = {} }) {
+  static init({ app, customConfig = {} }) {
     const config = parserConfig.getConfig(customConfig);
 
     // allow json input

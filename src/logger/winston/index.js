@@ -1,48 +1,60 @@
 // logger/winston/index.js
-import { createLogger, format, transports } from "winston";
+
+import { createLogger } from "winston";
 import logConfig from "../../config/logger/winstonConfig.js";
 
-class LoggerHandler {
-  static logger = null;
+export class LoggerHandler {
+  static #logger = null;
+  static #initialized = false;
 
-  constructor(config = {}) {
-    if (!LoggerHandler.logger) {
-      LoggerHandler.logger = createLogger(logConfig.getConfig(config));
-    }
+  /**
+   * Configure the Winston logger (only once)
+   */
+  static init(customConfig = {}) {
+    if (this.#initialized) return;
+
+    this.#logger = createLogger(logConfig.getConfig(customConfig));
+    this.#initialized = true;
   }
 
-  static configureLogger(customConfig = {}) {
-    if (LoggerHandler.logger) return; // prevent re-initialization
-    LoggerHandler.logger = createLogger(logConfig.getConfig(customConfig));
-  }
-
+  /**
+   * Middleware for logging requests
+   */
   static middleware() {
-    if (!LoggerHandler.logger) {
-      throw new Error(
-        "Logger not initialized. Use configureLogger() before using middleware."
-      );
+    if (!this.#logger) {
+      throw new Error("Logger not initialized. Call configureLogger() first.");
     }
 
     return (req, res, next) => {
-      LoggerHandler.logger.info(
+      this.#logger.info(
         `${req.method} ${req.url} - ${req.ip}${
-          req?.requestId ? ` | Request id: ${req.requestId}` : ""
+          req.requestId ? ` | Request ID: ${req.requestId}` : ""
         }`
       );
       next();
     };
   }
 
+  /**
+   * Get logger instance
+   */
   static getLogger() {
-    if (!LoggerHandler.logger) {
+    if (!this.#logger) {
       throw new Error("Logger not initialized.");
     }
-    return LoggerHandler.logger;
+    return this.#logger;
+  }
+
+  /**
+   * Check if logger is already initialized
+   */
+  static isInitialized() {
+    return this.#initialized;
   }
 }
 
-// Immediately create default logger (with default config)
-new LoggerHandler();
+// Eagerly initialize logger with default config (for quick use in app)
+LoggerHandler.init();
 
+// Export the singleton logger instance directly
 export const logger = LoggerHandler.getLogger();
-export default LoggerHandler;

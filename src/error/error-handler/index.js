@@ -11,12 +11,12 @@ export class ErrorHandler {
   static handleProcessError() {
     process.on("uncaughtException", (err) => {
       console.error("🔥 Uncaught Exception:", err);
-      process.exit(1);
+      // process.exit(1); // it will stop or crash the app
     });
 
     process.on("unhandledRejection", (reason, promise) => {
       console.error("🚨 Unhandled Rejection at:", promise, "reason:", reason);
-      process.exit(1);
+      // process.exit(1); // it will stop or crash the app
     });
 
     process.on("SIGINT", () => {

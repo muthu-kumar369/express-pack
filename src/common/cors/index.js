@@ -18,7 +18,7 @@ export class Cors {
    * @param {*} app Express app
    * @param {*} customConfig config for cors
    */
-  static setupCors({ app, customConfig = {} }) {
+  static init({ app, customConfig = {} }) {
     this.customConfig = corsConfig.getConfig(customConfig);
 
     // if we get custom config then get the cors config or else use deafult

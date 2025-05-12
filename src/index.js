@@ -7,5 +7,7 @@ export * from "./express/index.js";
 export * from "./logger/index.js";
 export * from "./metrics/index.js";
 export * from "./middleware/index.js";
+export * from "./plugin/index.js";
 export * from "./security/index.js";
+export * from "./third-party/index.js";
 export * from "./util/index.js";

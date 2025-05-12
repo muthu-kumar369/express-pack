@@ -1,23 +1,34 @@
+// common/compression.js
+
 import compression from "compression";
 import compressConfig from "../../config/common/compressionConfig.js";
 
-/**
- * Used to setup compress middleware in express
- */
-class CompressionHandler {
-  /**
-   * @param {*} app Express app
-   * @param {*} customConfig Custome configuration for compress
-   */
-  static setupCompress({ app, customConfig = {} }) {
-    const config = compressConfig.getConfig(customConfig);
+export class CompressionHandler {
+  static #initialized = false;
 
-    // use compress with config details
+  /**
+   * Set up compression middleware once
+   * @param {*} app Express app
+   * @param {*} customConfig Optional custom configuration
+   */
+  static init({ app, customConfig = {} }) {
+    if (this.#initialized) return;
+
+    const config = compressConfig.getConfig(customConfig);
     app.use(compression(config));
+
+    this.#initialized = true;
   }
 
-  static compression() {
-    return compression;
+  /**
+   * Direct access to compression function (if needed elsewhere)
+   */
+  static getMiddleware(config = {}) {
+    return compression(config);
+  }
+
+  static isInitialized() {
+    return this.#initialized;
   }
 }
 

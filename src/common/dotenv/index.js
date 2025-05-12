@@ -6,7 +6,7 @@ export class DotEnv {
   constructor() {
     this.envLib = dotenv;
   }
-  static loadEnv({ customPath = "" }) {
+  static init({ customPath = "" }) {
     // get path either custom or default
     const envPath = path.resolve(process.cwd(), customPath || ".env");
 

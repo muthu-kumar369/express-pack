@@ -26,7 +26,7 @@ export class AuthMiddlewareHandler {
           .json({ message: "Authorization token not found" });
 
       try {
-        const decoded = jwt.verify(token, secret || process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, secret || process?.env?.JWT_SECRET);
 
         req.user = decoded; // ✅ Attach user info to the request
         next();

@@ -15,7 +15,7 @@ export class SecurityHandler {
    * @param {*} app Express app
    * @param {*} customConfig custom configuration if modification needed
    */
-  static setupSecurity({ app, customConfig = {} }) {
+  static init({ app, customConfig = {} }) {
     this.config = securityConfig?.getConfig(customConfig);
     app.use(helmet(this.config));
   }
