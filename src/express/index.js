@@ -112,9 +112,14 @@ export class ExpressPack {
       throw new Error("Cannot bind routes before app initialization.");
     }
 
-    for (const { path, route } of routes) {
-      this.#app.use(path, route);
-    }
+    routes.forEach(({ prefix = "", version = "", route: routeList = [] }) => {
+      const basePath = prefix + version;
+
+      routeList.forEach(({ path, route }) => {
+        const fullPath = basePath ? basePath + path : path;
+        this.#app.use(fullPath, route);
+      });
+    });
   }
 
   /**
