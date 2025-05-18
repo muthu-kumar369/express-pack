@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    // --- Language and Module Settings ---
+    "target": "ES2020", // Modern JavaScript features with good Node.js support
+    "module": "ESNext", // Emit ESNext modules for ESM/CJS dual support with bundlers like tsup
+    "moduleResolution": "node", // Mimics Node.js module resolution
+
+    // --- Type Compatibility and Interop ---
+    "esModuleInterop": true, // Allows default imports from CommonJS modules like `express`
+    "allowSyntheticDefaultImports": true, // Lets you use `import x from "pkg"` even if the package uses `module.exports`
+    "resolveJsonModule": true, // Allows `import config from './config.json'`
+    "isolatedModules": true, // Ensures each file can be transpiled independently (needed by tsup and esbuild)
+    "skipLibCheck": true, // Skips checking type definitions in node_modules to speed up build
+
+    // --- Output Options ---
+    "outDir": "dist", // Output folder for compiled files
+    "declaration": true, // Generate `.d.ts` files for library consumers
+    "sourceMap": true, // Generate `.map` files for debugging
+    "inlineSources": true, // Inline the original source in source maps for easier debugging
+    "removeComments": true, // Clean output by removing comments
+    "noEmitOnError": true, // Prevent emitting files when there are compilation errors
+
+    // --- Project Structure ---
+    "rootDir": ".", // Treat the root directory (with app.ts) as the source root
+    "baseUrl": ".", // Required for custom path aliases
+    "paths": {
+      "@/*": ["src/*"] // Support absolute imports like `@/utils/log.ts`
+    },
+
+    // --- Type Safety & Consistency ---
+    "strict": true, // Enable all strict type checks
+    "forceConsistentCasingInFileNames": true, // Prevent case mismatch issues (especially in cross-platform dev)
+
+    // --- JS Support (Optional) ---
+    "allowJs": false // Disallow compiling .js files (set to true only if needed)
+  },
+  "include": ["app.ts", "src/**/*"], // Entry file and all files in src
+  "exclude": ["node_modules", "dist"] // Avoid compiling dependencies and output folder
+}
