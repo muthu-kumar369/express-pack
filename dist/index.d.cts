@@ -1,23 +1,127 @@
-import { Request, Response, NextFunction, RequestHandler, Application, Router } from 'express';
+import jwt, { JwtPayload } from 'jsonwebtoken';
+import { Strategy } from 'passport';
+import { Application, Request, Response, NextFunction, RequestHandler, Router } from 'express';
 import { OptionsJson, OptionsUrlencoded, Options, OptionsText } from 'body-parser';
 import compression, { CompressionFilter, CompressionOptions } from 'compression';
 import { CorsOptions } from 'cors';
 import dotenv, { DotenvConfigOutput } from 'dotenv';
-import mongoose, { ConnectOptions, Document, Model, Schema, IndexOptions } from 'mongoose';
 import { Logger } from 'winston';
-import jwt, { JwtPayload } from 'jsonwebtoken';
-import { ZodSchema } from 'zod';
 import { rateLimit } from 'express-rate-limit';
 import { HelmetOptions } from 'helmet';
-import { Method } from 'axios';
+import { ZodSchema } from 'zod';
+import { Document, Model, Schema, IndexOptions } from 'mongoose';
 import Redis from 'ioredis';
 import { Db } from 'mongodb';
 import { ScheduledTask } from 'node-cron';
+import { Method } from 'axios';
 import Redlock from 'redlock';
-import * as amqplib from 'amqplib';
-import { Options as Options$1, Channel } from 'amqplib';
 import { PutObjectCommandInput, PutObjectCommandOutput, DeleteObjectCommandOutput } from '@aws-sdk/client-s3';
 import { DebouncedFunc } from 'lodash-es';
+
+interface TokenPayload {
+    payload: object;
+    JWT_SECRET: string;
+    expiresIn?: string | number;
+}
+interface RefreshTokenPayload {
+    payload?: object;
+    REFRESH_SECRET?: string;
+    expiresIn?: string | number;
+}
+interface GenerateTokensParams {
+    tokenPayload?: TokenPayload;
+    refreshTokenPayload?: RefreshTokenPayload;
+    generateRefreshToken?: boolean;
+}
+interface VerifyParams {
+    token: string;
+    JWT_SECRET?: string;
+}
+interface DecodeParams {
+    token: string;
+}
+interface VerifyRefreshTokenParams {
+    token: string;
+    REFRESH_SECRET?: string;
+}
+interface RefreshAccessTokenParams {
+    token: string;
+    REFRESH_SECRET: string;
+    JWT_SECRET: string;
+}
+
+declare class JWTUtil {
+    static generateTokens({ tokenPayload, refreshTokenPayload, generateRefreshToken, }: GenerateTokensParams): Promise<string | {
+        accessToken: string;
+        refreshToken: string;
+    }>;
+    static generateRefreshToken({ payload, REFRESH_SECRET, expiresIn, }: RefreshTokenPayload): Promise<string>;
+    static verify({ token, JWT_SECRET }: VerifyParams): Promise<string | jwt.JwtPayload>;
+    static decode({ token }: DecodeParams): string | jwt.JwtPayload | null;
+    static verifyRefreshToken({ token, REFRESH_SECRET, }: VerifyRefreshTokenParams): Promise<string | jwt.JwtPayload>;
+    static refreshAccessToken({ token, REFRESH_SECRET, JWT_SECRET, }: RefreshAccessTokenParams): Promise<string | {
+        accessToken: string;
+        refreshToken: string;
+    } | null>;
+}
+
+interface PassportStrategyConfig {
+    name: string;
+    strategy: Strategy;
+}
+type SerializeUserFn = (user: Express.User, done: (err: any, id?: unknown) => void) => void;
+type DeserializeUserFn = (id: unknown, done: (err: any, user?: Express.User | false | null) => void) => void;
+
+declare class PassportService {
+    private static initialized;
+    static init(config: {
+        strategies: PassportStrategyConfig[];
+        serializeUser?: SerializeUserFn;
+        deserializeUser?: DeserializeUserFn;
+    }): void;
+    static initialize({ app }: {
+        app: Application;
+    }): void;
+    static session({ app }: {
+        app: Application;
+    }): void;
+}
+
+interface AuthMiddlewareOptions {
+    userAuth?: AuthenticateUserOptions;
+    roleAuth?: AuthorizeRoleOptions;
+    scopeAuth?: AuthorizeScopeOptions;
+}
+interface AuthenticateUserOptions {
+    secret?: string;
+    headerKey?: string;
+    usingBearer?: boolean;
+}
+interface AuthorizeRoleOptions {
+    allowedRoles?: string[];
+    checkAll?: boolean;
+}
+interface AuthorizeScopeOptions {
+    requiredScopes?: string[];
+    checkAll?: boolean;
+}
+interface AuthenticatedRequest extends Request {
+    req: Request;
+    user?: JwtPayload | string | any;
+}
+
+declare class AuthMiddleware {
+    static authenticateJWT({ userAuth, roleAuth, scopeAuth, }: AuthMiddlewareOptions): ((req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>) | ((req: Request, res: Response, next: NextFunction) => void);
+    static authenticatePassport(strategy: string, options?: any, callback?: (...args: any[]) => any): any;
+    static authenticateUser({ secret, headerKey, usingBearer, }: AuthenticateUserOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+    static authorizeRole({ allowedRoles, checkAll, }: AuthorizeRoleOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+    static authorizeScope({ requiredScopes, checkAll, }: AuthorizeScopeOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>;
+    static extractToken({ req, headerKey, usingBearer, }: {
+        req: Request;
+        headerKey?: string;
+        usingBearer?: boolean;
+    }): string | undefined;
+}
 
 type AsyncMiddleware = (req: Request, res: Response, next: NextFunction) => Promise<any> | void;
 
@@ -87,57 +191,6 @@ declare class DotEnv {
     }): DotenvConfigOutput["parsed"] | undefined;
 }
 
-interface MongooseConfig {
-    uri: string;
-    options?: ConnectOptions;
-}
-
-declare class Mongoose {
-    #private;
-    private constructor();
-    static init({ uri, options }: MongooseConfig): Promise<void>;
-    static getMongoose(): typeof mongoose;
-}
-
-type PluginOptionsMap = {
-    timestamps: true;
-    softDelete: true;
-    slugGenerator: true;
-    versioning: true;
-    multiTenancy: true;
-    pagination: true;
-    indexManager: true;
-    retryHandler: true;
-    autoPopulate: true;
-    smartPopulate: true;
-    sanitize: true;
-    fieldEncryption: {
-        fields: string[];
-    };
-    uniqueConstraint: {
-        fields: string[];
-        messages?: Record<string, string>;
-    };
-    schemaValidation: {
-        validate: Record<string, any>;
-    };
-};
-type PluginKey = keyof PluginOptionsMap;
-type PluginsConfig = {
-    [K in PluginKey]?: PluginOptionsMap[K];
-};
-interface BuildModelParams {
-    name: string;
-    schemaDefinition: mongoose.SchemaDefinition;
-    schemaOptions?: mongoose.SchemaOptions;
-    plugins?: PluginsConfig;
-}
-type MongooseModel = mongoose.Model<any>;
-
-declare class ModelBuilder {
-    static build({ name, schemaDefinition, schemaOptions, plugins, }: BuildModelParams): MongooseModel;
-}
-
 declare class ErrorHandler {
     static handleGlobalError(err: Error, req: Request, res: Response, next: NextFunction): Response;
     static handleProcessError(): void;
@@ -152,6 +205,38 @@ declare class TokenInvalidError extends Error {
 }
 declare class TokenBlacklistedError extends Error {
     constructor(message?: string);
+}
+
+declare class LoggerHandler {
+    #private;
+    static init(customConfig?: Record<string, unknown>): void;
+    static middleware(): (req: Request & {
+        requestId?: string;
+    }, res: Response, next: NextFunction) => void;
+    static getLogger(): Logger;
+    static isInitialized(): boolean;
+}
+declare const logger: Logger;
+
+interface ExpressRateLimitInitOptions {
+    app: Application;
+    customConfig?: Partial<Parameters<typeof rateLimit>[0]>;
+}
+
+interface HelmetInitOptions {
+    app: Application;
+    customConfig?: Partial<HelmetOptions>;
+}
+
+declare class RateLimitHandler {
+    #private;
+    static init({ app, customConfig }: ExpressRateLimitInitOptions): void;
+    static isInitialized(): boolean;
+}
+
+declare class SecurityHandler {
+    static config: HelmetOptions;
+    static init({ app, customConfig }: HelmetInitOptions): void;
 }
 
 type MiddlewareConfig = Record<string, any>;
@@ -182,52 +267,6 @@ declare class ExpressPack {
         routes?: RouteGroup[];
     }): void;
     static isInitialized(): boolean;
-}
-
-declare class LoggerHandler {
-    #private;
-    static init(customConfig?: Record<string, unknown>): void;
-    static middleware(): (req: Request & {
-        requestId?: string;
-    }, res: Response, next: NextFunction) => void;
-    static getLogger(): Logger;
-    static isInitialized(): boolean;
-}
-declare const logger: Logger;
-
-interface AuthMiddlewareOptions {
-    userAuth?: AuthenticateUserOptions;
-    roleAuth?: AuthorizeRoleOptions;
-    scopeAuth?: AuthorizeScopeOptions;
-}
-interface AuthenticateUserOptions {
-    secret?: string;
-    headerKey?: string;
-    usingBearer?: boolean;
-}
-interface AuthorizeRoleOptions {
-    allowedRoles?: string[];
-    checkAll?: boolean;
-}
-interface AuthorizeScopeOptions {
-    requiredScopes?: string[];
-    checkAll?: boolean;
-}
-interface AuthenticatedRequest extends Request {
-    req: Request;
-    user?: JwtPayload | string | any;
-}
-
-declare class AuthMiddlewareHandler {
-    static AuthMiddleware({ userAuth, roleAuth, scopeAuth, }: AuthMiddlewareOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>;
-    static authenticateUser({ secret, headerKey, usingBearer, }: AuthenticateUserOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
-    static authorizeRole({ allowedRoles, checkAll, }: AuthorizeRoleOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
-    static authorizeScope({ requiredScopes, checkAll, }: AuthorizeScopeOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>;
-    static extractToken({ req, headerKey, usingBearer, }: {
-        req: Request;
-        headerKey?: string;
-        usingBearer?: boolean;
-    }): string | undefined;
 }
 
 declare class RequestTracer {
@@ -359,27 +398,6 @@ declare const availablePlugins: {
     schemaValidation: typeof MongooseSecurityPlugin.SchemaValidation;
 };
 
-interface ExpressRateLimitInitOptions {
-    app: Application;
-    customConfig?: Partial<Parameters<typeof rateLimit>[0]>;
-}
-
-interface HelmetInitOptions {
-    app: Application;
-    customConfig?: Partial<HelmetOptions>;
-}
-
-declare class RateLimitHandler {
-    #private;
-    static init({ app, customConfig }: ExpressRateLimitInitOptions): void;
-    static isInitialized(): boolean;
-}
-
-declare class SecurityHandler {
-    static config: HelmetOptions;
-    static init({ app, customConfig }: HelmetInitOptions): void;
-}
-
 interface AxiosHelperConfig {
     baseURL: string;
     timeout?: number;
@@ -455,43 +473,6 @@ interface Transporter {
     }) => Promise<any>;
 }
 
-interface RabbitMQConfig {
-    enabled: boolean;
-    uri: string;
-    prefetch?: number;
-    exchanges?: ExchangeConfig[];
-    queues?: QueueConfig[];
-}
-interface ExchangeConfig {
-    name: string;
-    type: string;
-    options?: Options$1.AssertExchange;
-}
-interface QueueConfig {
-    name: string;
-    options?: Options$1.AssertQueue;
-    deadLetter?: boolean;
-    bindTo?: {
-        exchange: string;
-        routingKey?: string;
-    };
-}
-interface ConsumerOptions {
-    retryAttempts?: number;
-    retryDelayMs?: number;
-}
-type MessageHandler<T = any> = (msg: T) => Promise<void>;
-interface Consumer<T = any> {
-    queue: string;
-    handler: MessageHandler<T>;
-    options?: ConsumerOptions;
-}
-
-interface RedisSetOptions {
-    expire?: number;
-}
-type RedisInstance = Redis | null;
-
 interface S3Config {
     region?: string;
     accessKeyId?: string;
@@ -507,6 +488,14 @@ interface PresignedUrlParams {
 interface DeleteFileParams {
     Bucket: string;
     Key: string;
+}
+
+declare class NodeMailerService {
+    static transporter: Transporter | null;
+    static defaultFrom: string | undefined;
+    static init(): void;
+    static getTemplate({ templateName, templateParams, }: GetTemplateParams): Promise<EmailTemplate | undefined>;
+    static sendEmail({ to, templateName, templateParams, }: SendEmailParams): Promise<any>;
 }
 
 declare class AxiosHelper {
@@ -552,46 +541,6 @@ declare class CronManager {
     stopJob(name: string): void;
     removeJob(name: string): Promise<void>;
     listJobs(): string[];
-}
-
-declare class EmailService {
-    static transporter: Transporter | null;
-    static defaultFrom: string | undefined;
-    static init(): void;
-    static getTemplate({ templateName, templateParams, }: GetTemplateParams): Promise<EmailTemplate | undefined>;
-    static sendEmail({ to, templateName, templateParams, }: SendEmailParams): Promise<any>;
-}
-
-declare class RabbitMQService {
-    #private;
-    static enabled: boolean;
-    static config: RabbitMQConfig | null;
-    static connection: amqplib.ChannelModel | null;
-    static channel: Channel | null;
-    static isInitialized: boolean;
-    static consumers: Consumer[];
-    static init(config: RabbitMQConfig): Promise<void>;
-    static getChannel(): Channel;
-    static publishToExchange(exchange: string, routingKey: string, message: any): Promise<void>;
-    static publishToQueue(queue: string, message: any): Promise<void>;
-    static consume(queue: string, handler: MessageHandler, options?: ConsumerOptions): Promise<void>;
-}
-
-declare class RedisClientService {
-    static instance: RedisClientService | null;
-    static redis: RedisInstance;
-    static connected: boolean;
-    static isRedisEnabled: boolean;
-    constructor();
-    static enableRedis(enable?: boolean): void;
-    static init(): void;
-    static set(key: string, value: string, options?: RedisSetOptions): Promise<void>;
-    static get(key: string): Promise<string | null | undefined>;
-    static del(key: string): Promise<void>;
-    static expire(key: string, seconds: number): Promise<void>;
-    static keys(pattern?: string): Promise<string[] | undefined>;
-    static getClient(): RedisInstance;
-    static disconnect(): void;
 }
 
 declare class S3Service {
@@ -664,38 +613,6 @@ interface I18nInterface {
     init(params: I18nInitParams): Promise<void>;
     getMessage(locale: string, key: string): string;
     getConfig(code: string): any;
-}
-
-interface TokenPayload {
-    payload: object;
-    JWT_SECRET: string;
-    expiresIn?: string | number;
-}
-interface RefreshTokenPayload {
-    payload?: object;
-    REFRESH_SECRET?: string;
-    expiresIn?: string | number;
-}
-interface GenerateTokensParams {
-    tokenPayload?: TokenPayload;
-    refreshTokenPayload?: RefreshTokenPayload;
-    generateRefreshToken?: boolean;
-}
-interface VerifyParams {
-    token: string;
-    JWT_SECRET?: string;
-}
-interface DecodeParams {
-    token: string;
-}
-interface VerifyRefreshTokenParams {
-    token: string;
-    REFRESH_SECRET?: string;
-}
-interface RefreshAccessTokenParams {
-    token: string;
-    REFRESH_SECRET: string;
-    JWT_SECRET: string;
 }
 
 type AnyObject = Record<string, any>;
@@ -797,21 +714,6 @@ declare class DateUtilValidate {
     static isSameDay(date1: Date, date2: Date): boolean;
 }
 
-declare class JWTUtil {
-    static generateTokens({ tokenPayload, refreshTokenPayload, generateRefreshToken, }: GenerateTokensParams): Promise<string | {
-        accessToken: string;
-        refreshToken: string;
-    }>;
-    static generateRefreshToken({ payload, REFRESH_SECRET, expiresIn, }: RefreshTokenPayload): Promise<string>;
-    static verify({ token, JWT_SECRET }: VerifyParams): Promise<string | jwt.JwtPayload>;
-    static decode({ token }: DecodeParams): string | jwt.JwtPayload | null;
-    static verifyRefreshToken({ token, REFRESH_SECRET, }: VerifyRefreshTokenParams): Promise<string | jwt.JwtPayload>;
-    static refreshAccessToken({ token, REFRESH_SECRET, JWT_SECRET, }: RefreshAccessTokenParams): Promise<string | {
-        accessToken: string;
-        refreshToken: string;
-    } | null>;
-}
-
 declare class ResponseUtil {
     static send: ResponseUtilSend;
 }
@@ -841,4 +743,4 @@ declare class EncryptionUtil {
     static decrypt({ encryptedText, key, }: DecryptParams): string;
 }
 
-export { AsyncRouteWrapper, AuthMiddlewareHandler, AxiosHelper, BodyParser, CompressionHandler, Cors, CronManager, DateUtilBusiness, DateUtilCompare, DateUtilCreate, DateUtilDuration, DateUtilEdgeCase, DateUtilFormat, DateUtilManipulate, DateUtilTimezone, DateUtilValidate, DateUtilsRange, DotEnv, EmailService, EncryptionUtil, ErrorHandler, ExpressPack, JWTUtil, LodashHelper, LoggerHandler, ModelBuilder, Mongoose, MongooseCorePlugin, MongoosePerformancePlugin, MongoosePopulatePlugin, MongooseSecurityPlugin, RabbitMQService, RateLimitHandler, RedisClientService, RequestTracer, RequestValidator, ResponseUtil, S3Service, SecurityHandler, TokenBlacklistedError, TokenExpiredError, TokenInvalidError, availablePlugins, i18n, logger };
+export { AsyncRouteWrapper, AuthMiddleware, AxiosHelper, BodyParser, CompressionHandler, Cors, CronManager, DateUtilBusiness, DateUtilCompare, DateUtilCreate, DateUtilDuration, DateUtilEdgeCase, DateUtilFormat, DateUtilManipulate, DateUtilTimezone, DateUtilValidate, DateUtilsRange, DotEnv, EncryptionUtil, ErrorHandler, ExpressPack, JWTUtil, LodashHelper, LoggerHandler, MongooseCorePlugin, MongoosePerformancePlugin, MongoosePopulatePlugin, MongooseSecurityPlugin, NodeMailerService, PassportService, RateLimitHandler, RequestTracer, RequestValidator, ResponseUtil, S3Service, SecurityHandler, TokenBlacklistedError, TokenExpiredError, TokenInvalidError, availablePlugins, i18n, logger };

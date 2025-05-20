@@ -1,0 +1,146 @@
+import express, {
+  NextFunction,
+  Request,
+  Response,
+  Application,
+  Router,
+  RequestHandler,
+} from "express";
+import { CompressionHandler, LoggerHandler, RateLimitHandler } from "../../../app";
+import { BodyParser, Cors, DotEnv } from "../../common/index";
+import { SecurityHandler } from "../../common/security/index";
+import { MiddlewareConfig, RouteGroup } from "./types";
+import sessionConfig from "@/config/middleware/express-session.config";
+import session, { SessionOptions } from "express-session";
+
+export class ExpressPack {
+  static #app: Application | null = null;
+  static #initialized = false;
+
+  /**
+   * Initializes the express app with provided middleware config
+   * @param config Middleware configuration object
+   * @returns express app
+   */
+  static async init({
+    config = {},
+  }: {
+    config?: MiddlewareConfig;
+  }): Promise<Application> {
+    if (this.#initialized && this.#app) return this.#app;
+
+    this.#app = express();
+
+    // Add request ID middleware once
+    this.#app.use((req: Request, res: Response, next: NextFunction) => {
+      const requestId =
+        req.headers["x-request-id"] ||
+        `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      req.requestId = requestId;
+      res.setHeader("X-Request-ID", requestId);
+      next();
+    });
+
+    // use session with app
+    const expressSessionConfig = sessionConfig.getConfig(config?.sessionConfig);
+
+    this.#app.use(session(expressSessionConfig));
+
+    for (const [key, value] of Object.entries(config)) {
+      this.#applyMiddleware({ key, value });
+    }
+
+    this.#initialized = true;
+    return this.#app;
+  }
+
+  /**
+   * Middleware dispatcher
+   */
+  static #applyMiddleware({ key, value }: { key: string; value: any }) {
+    switch (key) {
+      case "bodyParser":
+        BodyParser.init({ app: this.#app!, customConfig: value });
+        break;
+
+      case "cors":
+        Cors.init({ app: this.#app!, customConfig: value });
+        break;
+
+      case "env":
+        DotEnv.init({ customPath: value });
+        break;
+
+      case "logger":
+        LoggerHandler.init(value);
+        this.#app!.use(LoggerHandler.middleware() as RequestHandler);
+        break;
+
+      case "security":
+        SecurityHandler.init({ app: this.#app!, customConfig: value });
+        break;
+
+      case "compression":
+        CompressionHandler.init({
+          app: this.#app!,
+          customConfig: value,
+        });
+        break;
+
+      case "express-rate-limit":
+        RateLimitHandler.init({
+          app: this.#app!,
+          customConfig: value,
+        });
+        break;
+
+      default:
+        console.warn(`[ExpressPack] Unknown middleware key: ${key}`);
+    }
+  }
+
+  /**
+   * Returns the initialized app instance
+   */
+  static getApp(): Application {
+    if (!this.#initialized || !this.#app) {
+      throw new Error(
+        "Express app not initialized. Call ExpressPack.init() first."
+      );
+    }
+    return this.#app;
+  }
+
+  /**
+   * Returns new Router instance
+   */
+  static getRouter(): Router {
+    return express.Router();
+  }
+
+  /**
+   * Binds routes to app after init
+   * @param routes Array of route config { path, route }
+   */
+  static initRoutes({ routes = [] }: { routes?: RouteGroup[] }) {
+    if (!this.#initialized || !this.#app) {
+      throw new Error("Cannot bind routes before app initialization.");
+    }
+
+    routes.forEach(({ prefix = "", version = "", route: routeList = [] }) => {
+      const basePath = prefix + version;
+
+      routeList.forEach(({ path, route }) => {
+        const fullPath = basePath ? basePath + path : path;
+        this.#app!.use(fullPath, route);
+      });
+    });
+  }
+
+  /**
+   * Check if app is initialized
+   */
+  static isInitialized(): boolean {
+    return this.#initialized;
+  }
+}

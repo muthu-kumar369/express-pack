@@ -7,6 +7,266 @@ var __privateAdd = (obj, member, value) => member.has(obj) ? __typeError("Cannot
 var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
 var __privateMethod = (obj, member, method) => (__accessCheck(obj, member, "access private method"), method);
 
+// src/auth/util/jwt/index.ts
+import jwt from "jsonwebtoken";
+
+// src/common/error/token-error/index.ts
+var TokenExpiredError = class extends Error {
+  constructor(message = "Token has expired") {
+    super(message);
+    this.name = "TokenExpiredError";
+  }
+};
+var TokenInvalidError = class extends Error {
+  constructor(message = "Token is invalid") {
+    super(message);
+    this.name = "TokenInvalidError";
+  }
+};
+var TokenBlacklistedError = class extends Error {
+  constructor(message = "Token has been blacklisted") {
+    super(message);
+    this.name = "TokenBlacklistedError";
+  }
+};
+
+// src/auth/util/jwt/index.ts
+var JWTUtil = class {
+  static async generateTokens({
+    tokenPayload,
+    refreshTokenPayload = {},
+    generateRefreshToken = false
+  }) {
+    if (!tokenPayload) {
+      throw new Error("Token payload is needed to generate the token");
+    }
+    const secret = tokenPayload.JWT_SECRET || process?.env?.JWT_SECRET || "";
+    if (!secret) {
+      throw new Error("JWT secret is required");
+    }
+    const expiresIn = tokenPayload.expiresIn ? tokenPayload.expiresIn : void 0;
+    const signOptions = {};
+    if (expiresIn) {
+      signOptions.expiresIn = process?.env?.ACCESS_TOKEN_EXPIRE_TIME || "25m";
+    }
+    if (generateRefreshToken) {
+      return {
+        accessToken: jwt.sign(tokenPayload.payload || {}, secret, signOptions),
+        refreshToken: await this.generateRefreshToken({
+          payload: tokenPayload.payload,
+          ...refreshTokenPayload
+        })
+      };
+    } else {
+      const { payload } = tokenPayload;
+      return jwt.sign(payload || {}, secret, signOptions);
+    }
+  }
+  static async generateRefreshToken({
+    payload,
+    REFRESH_SECRET = process?.env?.REFRESH_SECRET || "",
+    expiresIn = "7d"
+  }) {
+    if (!payload) {
+      throw new Error("Token payload is needed to generate the token");
+    }
+    if (!REFRESH_SECRET) {
+      throw new Error("Refresh secret is required");
+    }
+    const signOptions = {};
+    if (expiresIn) {
+      signOptions.expiresIn = process.env.REFRESH_TOKEN_EXPIRE_TOKEN || "7d";
+    }
+    return jwt.sign(payload, REFRESH_SECRET, signOptions);
+  }
+  static async verify({ token, JWT_SECRET = "" }) {
+    try {
+      const secret = JWT_SECRET || process?.env?.JWT_SECRET || "";
+      if (!secret) throw new Error("JWT secret is required for verification");
+      return jwt.verify(token, secret);
+    } catch (err) {
+      if (err.name === "TokenExpiredError") throw new TokenExpiredError();
+      if (err.name === "JsonWebTokenError") throw new TokenInvalidError();
+      throw err;
+    }
+  }
+  static decode({ token }) {
+    return jwt.decode(token);
+  }
+  static async verifyRefreshToken({
+    token,
+    REFRESH_SECRET = process?.env?.REFRESH_SECRET || ""
+  }) {
+    try {
+      if (!REFRESH_SECRET) {
+        throw new Error("Refresh secret is required for verification");
+      }
+      const payload = jwt.verify(token, REFRESH_SECRET);
+      return payload;
+    } catch {
+      throw new TokenInvalidError("Refresh token is invalid");
+    }
+  }
+  static async refreshAccessToken({
+    token,
+    REFRESH_SECRET,
+    JWT_SECRET
+  }) {
+    const payload = await this.verifyRefreshToken({ token, REFRESH_SECRET });
+    if (payload) {
+      return this.generateTokens({
+        tokenPayload: {
+          payload,
+          JWT_SECRET,
+          expiresIn: process?.env?.ACCESS_TOKEN_EXPIRE_TIME || "25m"
+        }
+      });
+    }
+    return null;
+  }
+};
+
+// src/auth/util/passport/index.ts
+import passport from "passport";
+var PassportService = class {
+  /**
+   * Initialize passport with strategies, serialization and deserialization
+   */
+  static init(config8) {
+    if (this.initialized) return;
+    for (const { name, strategy } of config8.strategies) {
+      passport.use(name, strategy);
+    }
+    passport.serializeUser(
+      config8.serializeUser ?? ((user, done) => done(null, user.id))
+    );
+    passport.deserializeUser(
+      config8.deserializeUser ?? ((id, done) => done(null, { id }))
+      // Default dummy, should be overridden
+    );
+    this.initialized = true;
+  }
+  /**
+   * Returns the passport middleware to be plugged into Express
+   */
+  static initialize({ app }) {
+    app.use(passport.initialize());
+  }
+  /**
+   * Returns the passport session middleware (optional)
+   */
+  static session({ app }) {
+    app.use(passport.session());
+  }
+};
+PassportService.initialized = false;
+
+// src/auth/middleware/index.ts
+import jwt2 from "jsonwebtoken";
+import passport2 from "passport";
+var AuthMiddleware = class {
+  static authenticateJWT({
+    userAuth = {},
+    roleAuth = {},
+    scopeAuth = {}
+  }) {
+    if (userAuth && Object.keys(userAuth).length) {
+      return this.authenticateUser(userAuth);
+    }
+    if (roleAuth && Object.keys(roleAuth).length) {
+      return this.authorizeRole(roleAuth);
+    }
+    if (scopeAuth && Object.keys(scopeAuth).length) {
+      return this.authorizeScope(scopeAuth);
+    }
+    return (req, res, next) => next();
+  }
+  /**
+   * Returns middleware for authenticating with a specific strategy
+   */
+  static authenticatePassport(strategy, options, callback) {
+    return passport2.authenticate(strategy, options, callback);
+  }
+  static authenticateUser({
+    secret,
+    headerKey = "authorization",
+    usingBearer = true
+  }) {
+    return (req, res, next) => {
+      const token = this.extractToken({ req, headerKey, usingBearer });
+      if (!token) {
+        return res.status(401).json({ message: "Authorization token not found" });
+      }
+      try {
+        const decoded = jwt2.verify(token, secret || process.env.JWT_SECRET);
+        req.user = decoded;
+        next();
+      } catch (err) {
+        return res.status(403).json({ message: "Invalid token" });
+      }
+    };
+  }
+  static authorizeRole({
+    allowedRoles = [],
+    checkAll = true
+  }) {
+    return (req, res, next) => {
+      const userRole = req.user?.role;
+      if (!userRole) {
+        return res.status(403).json({
+          status: "forbidden",
+          message: "No role found for the authenticated user. Please ensure your token includes a role."
+        });
+      }
+      if (!allowedRoles.includes(userRole)) {
+        return res.status(403).json({
+          status: "forbidden",
+          message: `Access denied. Required role(s): [${allowedRoles.join(
+            ", "
+          )}], but found: ${userRole}.`
+        });
+      }
+      next();
+    };
+  }
+  static authorizeScope({
+    requiredScopes = [],
+    checkAll = true
+  }) {
+    return (req, res, next) => {
+      const userScopes = req.user?.scopes || [];
+      let haveScope = false;
+      if (checkAll) {
+        haveScope = requiredScopes.every((scope) => userScopes.includes(scope));
+      } else {
+        haveScope = requiredScopes.some((scope) => userScopes.includes(scope));
+      }
+      if (haveScope) {
+        return next();
+      }
+      const missingScopes = requiredScopes.filter(
+        (scope) => !userScopes.includes(scope)
+      );
+      return res.status(403).json({
+        error: "Forbidden",
+        message: `Insufficient permissions. Missing required scope(s): [${missingScopes.join(
+          ", "
+        )}].`,
+        userScopes
+      });
+    };
+  }
+  static extractToken({
+    req,
+    headerKey = "authorization",
+    usingBearer = true
+  }) {
+    const headerValue = req.headers[headerKey.toLowerCase()];
+    if (!headerValue) return void 0;
+    return usingBearer ? headerValue.split(" ")[1] : headerValue;
+  }
+};
+
 // src/common/async-route-wrapper/index.ts
 var AsyncRouteWrapper = class {
   /**
@@ -219,85 +479,455 @@ var DotEnv = class {
   }
 };
 
-// src/db/connection/index.ts
-import mongoose from "mongoose";
-var _instance, _isConnected, _uri, _options, _Mongoose_static, connect_fn, reconnect_fn;
-var _Mongoose = class _Mongoose {
-  constructor() {
-    if (__privateGet(_Mongoose, _instance)) return __privateGet(_Mongoose, _instance);
-    __privateSet(_Mongoose, _instance, this);
-    mongoose.connection.on("connected", () => {
-      __privateSet(_Mongoose, _isConnected, true);
-      console.log("[MongoDB] Connected");
-    });
-    mongoose.connection.on("disconnected", () => {
-      __privateSet(_Mongoose, _isConnected, false);
-      console.log("[MongoDB] Disconnected. Retrying in 5s...");
-      setTimeout(() => {
-        var _a;
-        return __privateMethod(_a = _Mongoose, _Mongoose_static, reconnect_fn).call(_a);
-      }, 5e3);
-    });
-    mongoose.connection.on("error", (err) => {
-      console.error("[MongoDB] Connection error:", err);
+// src/common/error/error-handler/index.ts
+var ErrorHandler = class {
+  static handleGlobalError(err, req, res, next) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Internal Server Error"
     });
   }
-  static async init({ uri, options = {} }) {
-    var _a;
-    if (!uri) {
-      throw new Error("[MongoDB] URI is required to connect");
-    }
-    __privateSet(_Mongoose, _uri, uri);
-    __privateSet(_Mongoose, _options, options);
-    if (!__privateGet(_Mongoose, _instance)) {
-      new _Mongoose();
-    }
-    if (!__privateGet(_Mongoose, _isConnected)) {
-      await __privateMethod(_a = _Mongoose, _Mongoose_static, connect_fn).call(_a);
-    }
+  static handleProcessError() {
+    process.on("uncaughtException", (err) => {
+      console.error("\u{1F525} Uncaught Exception:", err);
+    });
+    process.on(
+      "unhandledRejection",
+      (reason, promise) => {
+        console.error("\u{1F6A8} Unhandled Rejection at:", promise, "reason:", reason);
+      }
+    );
+    process.on("SIGINT", () => {
+      console.log("\u26A0\uFE0F Process interrupted! Cleaning up...");
+      process.exit(1);
+    });
+    process.on("SIGTERM", () => {
+      console.log("\u2705 Process terminated gracefully.");
+      process.exit(0);
+    });
   }
-  static getMongoose() {
-    return mongoose;
-  }
-};
-_instance = new WeakMap();
-_isConnected = new WeakMap();
-_uri = new WeakMap();
-_options = new WeakMap();
-_Mongoose_static = new WeakSet();
-connect_fn = async function() {
-  try {
-    await mongoose.connect(__privateGet(_Mongoose, _uri), __privateGet(_Mongoose, _options));
-  } catch (err) {
-    console.error("[MongoDB] Initial connect failed. Retrying...");
-    setTimeout(() => {
-      var _a;
-      return __privateMethod(_a = _Mongoose, _Mongoose_static, reconnect_fn).call(_a);
-    }, 5e3);
+  static handleNotFoundRoute(req, res, next) {
+    return res.status(400).json({
+      status: "error",
+      message: "Route not found!"
+    });
   }
 };
-reconnect_fn = async function() {
-  if (!__privateGet(_Mongoose, _isConnected) && __privateGet(_Mongoose, _uri)) {
-    try {
-      await mongoose.connect(__privateGet(_Mongoose, _uri), __privateGet(_Mongoose, _options));
-    } catch (err) {
-      console.error("[MongoDB] Reconnect failed. Retrying...");
-      setTimeout(() => {
-        var _a;
-        return __privateMethod(_a = _Mongoose, _Mongoose_static, reconnect_fn).call(_a);
-      }, 5e3);
-    }
-  }
-};
-__privateAdd(_Mongoose, _Mongoose_static);
-__privateAdd(_Mongoose, _instance, null);
-__privateAdd(_Mongoose, _isConnected, false);
-__privateAdd(_Mongoose, _uri, "");
-__privateAdd(_Mongoose, _options, {});
-var Mongoose = _Mongoose;
 
-// src/db/model/index.ts
-import mongoose4 from "mongoose";
+// src/common/logger/winston/index.ts
+import { createLogger } from "winston";
+
+// src/config/logger/winstonConfig.ts
+import { format, transports } from "winston";
+import DailyRotateFile from "winston-daily-rotate-file";
+import path2 from "path";
+var config4 = {
+  logConfig: {
+    level: "info",
+    format: format.combine(
+      format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+      // Add a timestamp
+      format.printf(({ timestamp, level, message }) => {
+        return `[${timestamp}] ${level.toUpperCase()}: ${message}`;
+      })
+    ),
+    transports: [
+      new transports.Console(),
+      // Console logs
+      new DailyRotateFile({
+        filename: path2.join("logs", "app-%DATE%.log"),
+        datePattern: "YYYY-MM-DD",
+        maxFiles: `14d`,
+        level: "info"
+      }),
+      new DailyRotateFile({
+        filename: path2.join("logs", "errors-%DATE%.log"),
+        datePattern: "YYYY-MM-DD",
+        maxFiles: `30d`,
+        level: "error"
+      })
+    ],
+    exitOnError: false
+  },
+  getConfig: (config8 = {}) => {
+    return {
+      level: config8?.level || "info",
+      format: config8?.format || format.combine(
+        format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+        // Add a timestamp
+        format.printf(({ timestamp, level, message }) => {
+          return `[${timestamp}] ${level.toUpperCase()}: ${message}`;
+        })
+      ),
+      transports: config8?.transports || [
+        new transports.Console(),
+        // Console logs
+        new DailyRotateFile({
+          filename: path2.join("logs", "app-%DATE%.log"),
+          datePattern: "YYYY-MM-DD",
+          maxFiles: `14d`,
+          level: "info"
+        }),
+        new DailyRotateFile({
+          filename: path2.join("logs", "errors-%DATE%.log"),
+          datePattern: "YYYY-MM-DD",
+          maxFiles: `30d`,
+          level: "error"
+        })
+      ],
+      exitOnError: config8?.exitOnError || false
+    };
+  }
+};
+var winstonConfig_default = config4;
+
+// src/common/logger/winston/index.ts
+var _logger, _initialized2;
+var LoggerHandler = class {
+  /**
+   * Configure the Winston logger (only once)
+   */
+  static init(customConfig = {}) {
+    if (__privateGet(this, _initialized2)) return;
+    __privateSet(this, _logger, createLogger(winstonConfig_default.getConfig(customConfig)));
+    __privateSet(this, _initialized2, true);
+  }
+  /**
+   * Middleware for logging requests
+   */
+  static middleware() {
+    if (!__privateGet(this, _logger)) {
+      throw new Error("Logger not initialized. Call init() first.");
+    }
+    return (req, res, next) => {
+      __privateGet(this, _logger).info(
+        `${req.method} ${req.url} - ${req.ip}${req.requestId ? ` | Request ID: ${req.requestId}` : ""}`
+      );
+      next();
+    };
+  }
+  /**
+   * Get logger instance
+   */
+  static getLogger() {
+    if (!__privateGet(this, _logger)) {
+      throw new Error("Logger not initialized.");
+    }
+    return __privateGet(this, _logger);
+  }
+  /**
+   * Check if logger is already initialized
+   */
+  static isInitialized() {
+    return __privateGet(this, _initialized2);
+  }
+};
+_logger = new WeakMap();
+_initialized2 = new WeakMap();
+__privateAdd(LoggerHandler, _logger, null);
+__privateAdd(LoggerHandler, _initialized2, false);
+LoggerHandler.init();
+var logger = LoggerHandler.getLogger();
+
+// src/common/security/express-rate-limit/index.ts
+import { rateLimit } from "express-rate-limit";
+
+// src/config/security/expressRateLimitConfig.ts
+var config5 = {
+  getConfig: (config8 = {}) => {
+    return {
+      windowMs: config8?.windowMs || 6e4,
+      // 1 minute in milliseconds
+      limit: config8?.limit || 5,
+      // Max requests per minute
+      message: config8?.message || "Too many requests, please try again later.",
+      statusCode: config8?.statusCode || 429,
+      // Status code when rate limit is exceeded
+      handler: config8?.handler || (() => {
+      }),
+      // Optional custom handler function for exceeded limit
+      legacyHeaders: config8?.legacyHeaders || true,
+      // Enable legacy X-RateLimit-* headers
+      standardHeaders: config8?.standardHeaders || "draft-6",
+      // Use IETF draft-6 rate-limiting headers
+      identifier: config8?.identifier || null,
+      // Optional custom identifier for the policy
+      store: config8?.store || null,
+      // Uses in-memory store by default
+      passOnStoreError: config8?.passOnStoreError || false,
+      // Do not pass if store fails (defaults to false)
+      keyGenerator: config8?.keyGenerator || ((req) => req.ip),
+      // Identify users by their IP address
+      requestPropertyName: config8?.requestPropertyName || "rateLimit",
+      // Store rate limit info in `req.rateLimit`
+      skip: config8?.skip || (() => false),
+      // Don't skip any requests by default
+      skipSuccessfulRequests: config8?.skipSuccessfulRequests || false,
+      // Count 1xx/2xx/3xx responses
+      skipFailedRequests: config8?.skipFailedRequests || false,
+      // Count 4xx/5xx responses
+      requestWasSuccessful: config8?.requestWasSuccessful || ((req, res) => res.statusCode < 400),
+      // Check if request was successful
+      validate: config8?.validate || true
+      // Enable config validation
+    };
+  }
+};
+var expressRateLimitConfig_default = config5;
+
+// src/common/security/express-rate-limit/index.ts
+var _initialized3, _rateLimiterMiddleware;
+var RateLimitHandler = class {
+  /**
+   * Setup rate limit middleware on the app (once only)
+   * @param app Express app instance
+   * @param customConfig Optional custom rate limit config
+   */
+  static init({ app, customConfig = {} }) {
+    if (__privateGet(this, _initialized3)) return;
+    const config8 = expressRateLimitConfig_default.getConfig(customConfig);
+    __privateSet(this, _rateLimiterMiddleware, rateLimit(config8));
+    app.use(__privateGet(this, _rateLimiterMiddleware));
+    __privateSet(this, _initialized3, true);
+  }
+  static isInitialized() {
+    return __privateGet(this, _initialized3);
+  }
+};
+_initialized3 = new WeakMap();
+_rateLimiterMiddleware = new WeakMap();
+__privateAdd(RateLimitHandler, _initialized3, false);
+__privateAdd(RateLimitHandler, _rateLimiterMiddleware, null);
+
+// src/common/security/helmet/index.ts
+import helmet from "helmet";
+
+// src/config/security/helmetConfig.ts
+var config6 = {
+  securityConfig: {
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    dnsPrefetchControl: true,
+    frameguard: "sameorigin",
+    hidePoweredBy: false,
+    hsts: { maxAge: 0, includeSubDomains: false, preload: false },
+    ieNoOpen: false,
+    noSniff: false,
+    originAgentCluster: false,
+    referrerPolicy: "no-referrer-when-downgrade",
+    xssFilter: true
+  },
+  getConfig: (config8 = {}) => {
+    return {
+      contentSecurityPolicy: config8?.contentSecurityPolicy || false,
+      crossOriginEmbedderPolicy: config8?.crossOriginEmbedderPolicy || false,
+      crossOriginOpenerPolicy: config8?.crossOriginEmbedderPolicy || false,
+      dnsPrefetchControl: config8?.dnsPrefetchControl || true,
+      frameguard: config8?.frameguard || "sameorigin",
+      hidePoweredBy: config8?.hidePoweredBy || false,
+      hsts: config8?.hsts || {
+        maxAge: 0,
+        includeSubDomains: false,
+        preload: false
+      },
+      ieNoOpen: config8?.ieNoOpen || false,
+      noSniff: config8?.noSniff || false,
+      originAgentCluster: config8?.originAgentCluster || false,
+      referrerPolicy: config8?.referrerPolicy || "no-referrer-when-downgrade",
+      xssFilter: config8?.xssFilter || true
+    };
+  }
+};
+var helmetConfig_default = config6;
+
+// src/common/security/helmet/index.ts
+var SecurityHandler = class {
+  /**
+   * Used to setup the security using helmet for app
+   * @param app Express app
+   * @param customConfig custom configuration if modification needed
+   */
+  static init({ app, customConfig = {} }) {
+    this.config = helmetConfig_default?.getConfig(customConfig);
+    app.use(helmet(this.config));
+  }
+};
+
+// src/framework/express/index.ts
+import express from "express";
+
+// src/config/middleware/express-session.config.ts
+var sessionConfig = {
+  getConfig: (config8 = {}) => {
+    const defaultCookie = {
+      maxAge: 24 * 60 * 60 * 1e3,
+      // 1 day
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      domain: void 0,
+      expires: void 0
+    };
+    return {
+      secret: process.env.SESSION_SECRET || "default_secret_change_me",
+      resave: false,
+      saveUninitialized: false,
+      rolling: false,
+      proxy: process.env.NODE_ENV === "production",
+      cookie: {
+        ...defaultCookie,
+        ...config8.cookie || {}
+      },
+      ...config8
+    };
+  }
+};
+var express_session_config_default = sessionConfig;
+
+// src/framework/express/index.ts
+import session from "express-session";
+var _app, _initialized4, _ExpressPack_static, applyMiddleware_fn;
+var ExpressPack = class {
+  /**
+   * Initializes the express app with provided middleware config
+   * @param config Middleware configuration object
+   * @returns express app
+   */
+  static async init({
+    config: config8 = {}
+  }) {
+    if (__privateGet(this, _initialized4) && __privateGet(this, _app)) return __privateGet(this, _app);
+    __privateSet(this, _app, express());
+    __privateGet(this, _app).use((req, res, next) => {
+      const requestId = req.headers["x-request-id"] || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      req.requestId = requestId;
+      res.setHeader("X-Request-ID", requestId);
+      next();
+    });
+    const expressSessionConfig = express_session_config_default.getConfig(config8?.sessionConfig);
+    __privateGet(this, _app).use(session(expressSessionConfig));
+    for (const [key, value] of Object.entries(config8)) {
+      __privateMethod(this, _ExpressPack_static, applyMiddleware_fn).call(this, { key, value });
+    }
+    __privateSet(this, _initialized4, true);
+    return __privateGet(this, _app);
+  }
+  /**
+   * Returns the initialized app instance
+   */
+  static getApp() {
+    if (!__privateGet(this, _initialized4) || !__privateGet(this, _app)) {
+      throw new Error(
+        "Express app not initialized. Call ExpressPack.init() first."
+      );
+    }
+    return __privateGet(this, _app);
+  }
+  /**
+   * Returns new Router instance
+   */
+  static getRouter() {
+    return express.Router();
+  }
+  /**
+   * Binds routes to app after init
+   * @param routes Array of route config { path, route }
+   */
+  static initRoutes({ routes = [] }) {
+    if (!__privateGet(this, _initialized4) || !__privateGet(this, _app)) {
+      throw new Error("Cannot bind routes before app initialization.");
+    }
+    routes.forEach(({ prefix = "", version = "", route: routeList = [] }) => {
+      const basePath = prefix + version;
+      routeList.forEach(({ path: path3, route }) => {
+        const fullPath = basePath ? basePath + path3 : path3;
+        __privateGet(this, _app).use(fullPath, route);
+      });
+    });
+  }
+  /**
+   * Check if app is initialized
+   */
+  static isInitialized() {
+    return __privateGet(this, _initialized4);
+  }
+};
+_app = new WeakMap();
+_initialized4 = new WeakMap();
+_ExpressPack_static = new WeakSet();
+applyMiddleware_fn = function({ key, value }) {
+  switch (key) {
+    case "bodyParser":
+      BodyParser.init({ app: __privateGet(this, _app), customConfig: value });
+      break;
+    case "cors":
+      Cors.init({ app: __privateGet(this, _app), customConfig: value });
+      break;
+    case "env":
+      DotEnv.init({ customPath: value });
+      break;
+    case "logger":
+      LoggerHandler.init(value);
+      __privateGet(this, _app).use(LoggerHandler.middleware());
+      break;
+    case "security":
+      SecurityHandler.init({ app: __privateGet(this, _app), customConfig: value });
+      break;
+    case "compression":
+      CompressionHandler.init({
+        app: __privateGet(this, _app),
+        customConfig: value
+      });
+      break;
+    case "express-rate-limit":
+      RateLimitHandler.init({
+        app: __privateGet(this, _app),
+        customConfig: value
+      });
+      break;
+    default:
+      console.warn(`[ExpressPack] Unknown middleware key: ${key}`);
+  }
+};
+__privateAdd(ExpressPack, _ExpressPack_static);
+__privateAdd(ExpressPack, _app, null);
+__privateAdd(ExpressPack, _initialized4, false);
+
+// src/middleware/request-tracer/index.ts
+var RequestTracer = class {
+  static addRequestId(req, res, next) {
+    const requestId = req.headers["x-request-id"] || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    req.requestId = requestId;
+    res.setHeader("X-Request-ID", requestId);
+    next();
+  }
+};
+
+// src/middleware/request-validator/index.ts
+import { ZodError } from "zod";
+var RequestValidator = class {
+  static validateRequest({ params, query, body }) {
+    return (req, res, next) => {
+      try {
+        const parsed = {
+          ...params ? params.parse(req.params) : {},
+          ...query ? query.parse(req.query) : {},
+          ...body ? body.parse(req.body) : {}
+        };
+        req.data = parsed;
+        next();
+      } catch (err) {
+        if (err instanceof ZodError) {
+          return res.status(400).json({ error: err.flatten() });
+        }
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+    };
+  }
+};
 
 // src/plugin/mongoose/core/index.ts
 import slugify from "slugify";
@@ -468,13 +1098,13 @@ var MongooseCorePlugin = class {
 };
 
 // src/plugin/mongoose/performance/index.ts
-import mongoose2 from "mongoose";
+import mongoose from "mongoose";
 var MongoosePerformancePlugin = class {
   // 1. Index Manager Plugin
   static IndexManager(schema, options = { indexes: [] }) {
     return function(schema2) {
       const { indexes } = options;
-      const db = mongoose2.connection.db;
+      const db = mongoose.connection.db;
       if (!db) {
         console.warn("MongoDB connection not established yet.");
         return;
@@ -487,7 +1117,7 @@ var MongoosePerformancePlugin = class {
         schema2.index({ [index.field]: index.type || 1 }, index.options || {});
       });
       schema2.post("save", function(doc) {
-        const db2 = mongoose2.connection.db;
+        const db2 = mongoose.connection.db;
         if (!db2) {
           console.warn("MongoDB connection not established yet.");
           return;
@@ -545,7 +1175,7 @@ var MongoosePerformancePlugin = class {
 };
 
 // src/plugin/mongoose/populate/index.ts
-import mongoose3 from "mongoose";
+import mongoose2 from "mongoose";
 var MongoosePopulatePlugin = class {
   static AutoPopulate(schema, options = { paths: [] }) {
     return function(schema2) {
@@ -559,7 +1189,7 @@ var MongoosePopulatePlugin = class {
       schema2.pre("updateOne", preHook);
       schema2.pre("save", function(next) {
         paths.forEach((path3) => {
-          if (this[path3] && mongoose3.isObjectIdOrHexString(this[path3])) {
+          if (this[path3] && mongoose2.isObjectIdOrHexString(this[path3])) {
             this.populate(path3);
           }
         });
@@ -593,7 +1223,7 @@ var MongoosePopulatePlugin = class {
       schema2.pre("updateOne", preHook);
       schema2.pre("save", function(next) {
         Object.keys(fields).forEach((field) => {
-          if (this[field] && mongoose3.isObjectIdOrHexString(this[field])) {
+          if (this[field] && mongoose2.isObjectIdOrHexString(this[field])) {
             this.populate(buildPopulateQuery(field));
           }
         });
@@ -747,572 +1377,82 @@ var availablePlugins = {
   schemaValidation: MongooseSecurityPlugin.SchemaValidation
 };
 
-// src/db/model/index.ts
-var ModelBuilder = class {
-  static build({
-    name,
-    schemaDefinition,
-    schemaOptions = {},
-    plugins = {}
-  }) {
-    if (!name || !schemaDefinition) {
-      throw new Error("Model name and schema definition are required.");
-    }
-    if (mongoose4.models[name]) {
-      return mongoose4.models[name];
-    }
-    const schema = new mongoose4.Schema(schemaDefinition, schemaOptions);
-    for (const pluginKey of Object.keys(plugins)) {
-      const pluginFn = availablePlugins[pluginKey];
-      const pluginValue = plugins[pluginKey];
-      if (pluginFn && typeof pluginFn === "function") {
-        if (pluginValue === true) {
-          pluginFn(schema);
-        } else {
-          pluginFn(schema, pluginValue);
-        }
+// src/service/message/email/node-mailer/transporter/index.ts
+import nodemailer from "nodemailer";
+var NodeMailerTransporter = class {
+  static create() {
+    return nodemailer.createTransport({
+      host: process?.env?.SMTP_HOST,
+      port: process?.env?.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587,
+      secure: process?.env?.SMTP_SECURE === "true",
+      auth: {
+        user: process?.env?.SMTP_USER,
+        pass: process?.env?.SMTP_PASS
       }
+    });
+  }
+};
+
+// src/config/email-template/index.ts
+var email_template_default = {
+  welcome: ({ data }) => ({
+    subject: `Welcome, ${data?.name}`,
+    html: `<h1>Hello ${data?.name},</h1><p>We're happy to have you!</p>`
+  }),
+  resetPassword: ({ data }) => ({
+    subject: "Reset Your Password",
+    html: `<p>Click <a href="https://example.com/reset/${data?.token}">here</a> to reset your password.</p>`
+  }),
+  orderConfirmed: ({ data }) => ({
+    subject: `Order #${data?.orderId} Confirmed`,
+    html: `<p>Your order <strong>#${data?.orderId}</strong> has been confirmed.</p>`
+  })
+};
+
+// src/service/message/email/node-mailer/email-service/index.ts
+var _NodeMailerService = class _NodeMailerService {
+  static init() {
+    if (!_NodeMailerService.transporter) {
+      _NodeMailerService.transporter = NodeMailerTransporter.create();
     }
-    return mongoose4.model(name, schema);
   }
-};
-
-// src/error/error-handler/index.ts
-var ErrorHandler = class {
-  static handleGlobalError(err, req, res, next) {
-    console.error(err);
-    return res.status(500).json({
-      success: false,
-      message: err.message || "Internal Server Error"
-    });
-  }
-  static handleProcessError() {
-    process.on("uncaughtException", (err) => {
-      console.error("\u{1F525} Uncaught Exception:", err);
-    });
-    process.on(
-      "unhandledRejection",
-      (reason, promise) => {
-        console.error("\u{1F6A8} Unhandled Rejection at:", promise, "reason:", reason);
-      }
-    );
-    process.on("SIGINT", () => {
-      console.log("\u26A0\uFE0F Process interrupted! Cleaning up...");
-      process.exit(1);
-    });
-    process.on("SIGTERM", () => {
-      console.log("\u2705 Process terminated gracefully.");
-      process.exit(0);
-    });
-  }
-  static handleNotFoundRoute(req, res, next) {
-    return res.status(400).json({
-      status: "error",
-      message: "Route not found!"
-    });
-  }
-};
-
-// src/error/token-error/index.ts
-var TokenExpiredError = class extends Error {
-  constructor(message = "Token has expired") {
-    super(message);
-    this.name = "TokenExpiredError";
-  }
-};
-var TokenInvalidError = class extends Error {
-  constructor(message = "Token is invalid") {
-    super(message);
-    this.name = "TokenInvalidError";
-  }
-};
-var TokenBlacklistedError = class extends Error {
-  constructor(message = "Token has been blacklisted") {
-    super(message);
-    this.name = "TokenBlacklistedError";
-  }
-};
-
-// src/express/index.ts
-import express from "express";
-
-// src/logger/winston/index.ts
-import { createLogger } from "winston";
-
-// src/config/logger/winstonConfig.ts
-import { format, transports } from "winston";
-import DailyRotateFile from "winston-daily-rotate-file";
-import path2 from "path";
-var config4 = {
-  logConfig: {
-    level: "info",
-    format: format.combine(
-      format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-      // Add a timestamp
-      format.printf(({ timestamp, level, message }) => {
-        return `[${timestamp}] ${level.toUpperCase()}: ${message}`;
-      })
-    ),
-    transports: [
-      new transports.Console(),
-      // Console logs
-      new DailyRotateFile({
-        filename: path2.join("logs", "app-%DATE%.log"),
-        datePattern: "YYYY-MM-DD",
-        maxFiles: `14d`,
-        level: "info"
-      }),
-      new DailyRotateFile({
-        filename: path2.join("logs", "errors-%DATE%.log"),
-        datePattern: "YYYY-MM-DD",
-        maxFiles: `30d`,
-        level: "error"
-      })
-    ],
-    exitOnError: false
-  },
-  getConfig: (config8 = {}) => {
-    return {
-      level: config8?.level || "info",
-      format: config8?.format || format.combine(
-        format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-        // Add a timestamp
-        format.printf(({ timestamp, level, message }) => {
-          return `[${timestamp}] ${level.toUpperCase()}: ${message}`;
-        })
-      ),
-      transports: config8?.transports || [
-        new transports.Console(),
-        // Console logs
-        new DailyRotateFile({
-          filename: path2.join("logs", "app-%DATE%.log"),
-          datePattern: "YYYY-MM-DD",
-          maxFiles: `14d`,
-          level: "info"
-        }),
-        new DailyRotateFile({
-          filename: path2.join("logs", "errors-%DATE%.log"),
-          datePattern: "YYYY-MM-DD",
-          maxFiles: `30d`,
-          level: "error"
-        })
-      ],
-      exitOnError: config8?.exitOnError || false
-    };
-  }
-};
-var winstonConfig_default = config4;
-
-// src/logger/winston/index.ts
-var _logger, _initialized2;
-var LoggerHandler = class {
-  /**
-   * Configure the Winston logger (only once)
-   */
-  static init(customConfig = {}) {
-    if (__privateGet(this, _initialized2)) return;
-    __privateSet(this, _logger, createLogger(winstonConfig_default.getConfig(customConfig)));
-    __privateSet(this, _initialized2, true);
-  }
-  /**
-   * Middleware for logging requests
-   */
-  static middleware() {
-    if (!__privateGet(this, _logger)) {
-      throw new Error("Logger not initialized. Call init() first.");
-    }
-    return (req, res, next) => {
-      __privateGet(this, _logger).info(
-        `${req.method} ${req.url} - ${req.ip}${req.requestId ? ` | Request ID: ${req.requestId}` : ""}`
-      );
-      next();
-    };
-  }
-  /**
-   * Get logger instance
-   */
-  static getLogger() {
-    if (!__privateGet(this, _logger)) {
-      throw new Error("Logger not initialized.");
-    }
-    return __privateGet(this, _logger);
-  }
-  /**
-   * Check if logger is already initialized
-   */
-  static isInitialized() {
-    return __privateGet(this, _initialized2);
-  }
-};
-_logger = new WeakMap();
-_initialized2 = new WeakMap();
-__privateAdd(LoggerHandler, _logger, null);
-__privateAdd(LoggerHandler, _initialized2, false);
-LoggerHandler.init();
-var logger = LoggerHandler.getLogger();
-
-// src/security/express-rate-limit/index.ts
-import { rateLimit } from "express-rate-limit";
-
-// src/config/security/expressRateLimitConfig.ts
-var config5 = {
-  getConfig: (config8 = {}) => {
-    return {
-      windowMs: config8?.windowMs || 6e4,
-      // 1 minute in milliseconds
-      limit: config8?.limit || 5,
-      // Max requests per minute
-      message: config8?.message || "Too many requests, please try again later.",
-      statusCode: config8?.statusCode || 429,
-      // Status code when rate limit is exceeded
-      handler: config8?.handler || (() => {
-      }),
-      // Optional custom handler function for exceeded limit
-      legacyHeaders: config8?.legacyHeaders || true,
-      // Enable legacy X-RateLimit-* headers
-      standardHeaders: config8?.standardHeaders || "draft-6",
-      // Use IETF draft-6 rate-limiting headers
-      identifier: config8?.identifier || null,
-      // Optional custom identifier for the policy
-      store: config8?.store || null,
-      // Uses in-memory store by default
-      passOnStoreError: config8?.passOnStoreError || false,
-      // Do not pass if store fails (defaults to false)
-      keyGenerator: config8?.keyGenerator || ((req) => req.ip),
-      // Identify users by their IP address
-      requestPropertyName: config8?.requestPropertyName || "rateLimit",
-      // Store rate limit info in `req.rateLimit`
-      skip: config8?.skip || (() => false),
-      // Don't skip any requests by default
-      skipSuccessfulRequests: config8?.skipSuccessfulRequests || false,
-      // Count 1xx/2xx/3xx responses
-      skipFailedRequests: config8?.skipFailedRequests || false,
-      // Count 4xx/5xx responses
-      requestWasSuccessful: config8?.requestWasSuccessful || ((req, res) => res.statusCode < 400),
-      // Check if request was successful
-      validate: config8?.validate || true
-      // Enable config validation
-    };
-  }
-};
-var expressRateLimitConfig_default = config5;
-
-// src/security/express-rate-limit/index.ts
-var _initialized3, _rateLimiterMiddleware;
-var RateLimitHandler = class {
-  /**
-   * Setup rate limit middleware on the app (once only)
-   * @param app Express app instance
-   * @param customConfig Optional custom rate limit config
-   */
-  static init({ app, customConfig = {} }) {
-    if (__privateGet(this, _initialized3)) return;
-    const config8 = expressRateLimitConfig_default.getConfig(customConfig);
-    __privateSet(this, _rateLimiterMiddleware, rateLimit(config8));
-    app.use(__privateGet(this, _rateLimiterMiddleware));
-    __privateSet(this, _initialized3, true);
-  }
-  static isInitialized() {
-    return __privateGet(this, _initialized3);
-  }
-};
-_initialized3 = new WeakMap();
-_rateLimiterMiddleware = new WeakMap();
-__privateAdd(RateLimitHandler, _initialized3, false);
-__privateAdd(RateLimitHandler, _rateLimiterMiddleware, null);
-
-// src/security/helmet/index.ts
-import helmet from "helmet";
-
-// src/config/security/helmetConfig.ts
-var config6 = {
-  securityConfig: {
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false,
-    crossOriginOpenerPolicy: false,
-    dnsPrefetchControl: true,
-    frameguard: "sameorigin",
-    hidePoweredBy: false,
-    hsts: { maxAge: 0, includeSubDomains: false, preload: false },
-    ieNoOpen: false,
-    noSniff: false,
-    originAgentCluster: false,
-    referrerPolicy: "no-referrer-when-downgrade",
-    xssFilter: true
-  },
-  getConfig: (config8 = {}) => {
-    return {
-      contentSecurityPolicy: config8?.contentSecurityPolicy || false,
-      crossOriginEmbedderPolicy: config8?.crossOriginEmbedderPolicy || false,
-      crossOriginOpenerPolicy: config8?.crossOriginEmbedderPolicy || false,
-      dnsPrefetchControl: config8?.dnsPrefetchControl || true,
-      frameguard: config8?.frameguard || "sameorigin",
-      hidePoweredBy: config8?.hidePoweredBy || false,
-      hsts: config8?.hsts || {
-        maxAge: 0,
-        includeSubDomains: false,
-        preload: false
-      },
-      ieNoOpen: config8?.ieNoOpen || false,
-      noSniff: config8?.noSniff || false,
-      originAgentCluster: config8?.originAgentCluster || false,
-      referrerPolicy: config8?.referrerPolicy || "no-referrer-when-downgrade",
-      xssFilter: config8?.xssFilter || true
-    };
-  }
-};
-var helmetConfig_default = config6;
-
-// src/security/helmet/index.ts
-var SecurityHandler = class {
-  /**
-   * Used to setup the security using helmet for app
-   * @param app Express app
-   * @param customConfig custom configuration if modification needed
-   */
-  static init({ app, customConfig = {} }) {
-    this.config = helmetConfig_default?.getConfig(customConfig);
-    app.use(helmet(this.config));
-  }
-};
-
-// src/express/index.ts
-var _app, _initialized4, _ExpressPack_static, applyMiddleware_fn;
-var ExpressPack = class {
-  /**
-   * Initializes the express app with provided middleware config
-   * @param config Middleware configuration object
-   * @returns express app
-   */
-  static async init({
-    config: config8 = {}
+  static async getTemplate({
+    templateName,
+    templateParams
   }) {
-    if (__privateGet(this, _initialized4) && __privateGet(this, _app)) return __privateGet(this, _app);
-    __privateSet(this, _app, express());
-    __privateGet(this, _app).use((req, res, next) => {
-      const requestId = req.headers["x-request-id"] || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      req.requestId = requestId;
-      res.setHeader("X-Request-ID", requestId);
-      next();
+    return email_template_default?.[templateName]?.({
+      data: templateParams
     });
-    for (const [key, value] of Object.entries(config8)) {
-      __privateMethod(this, _ExpressPack_static, applyMiddleware_fn).call(this, { key, value });
-    }
-    __privateSet(this, _initialized4, true);
-    return __privateGet(this, _app);
   }
-  /**
-   * Returns the initialized app instance
-   */
-  static getApp() {
-    if (!__privateGet(this, _initialized4) || !__privateGet(this, _app)) {
+  static async sendEmail({
+    to,
+    templateName,
+    templateParams = {}
+  }) {
+    if (!_NodeMailerService.transporter) {
       throw new Error(
-        "Express app not initialized. Call ExpressPack.init() first."
+        "NodeMailerService not initialized. Please initialize first."
       );
     }
-    return __privateGet(this, _app);
-  }
-  /**
-   * Returns new Router instance
-   */
-  static getRouter() {
-    return express.Router();
-  }
-  /**
-   * Binds routes to app after init
-   * @param routes Array of route config { path, route }
-   */
-  static initRoutes({ routes = [] }) {
-    if (!__privateGet(this, _initialized4) || !__privateGet(this, _app)) {
-      throw new Error("Cannot bind routes before app initialization.");
+    const template = await _NodeMailerService.getTemplate({
+      templateName,
+      templateParams
+    });
+    if (!template) {
+      throw new Error(`Template '${templateName}' not found`);
     }
-    routes.forEach(({ prefix = "", version = "", route: routeList = [] }) => {
-      const basePath = prefix + version;
-      routeList.forEach(({ path: path3, route }) => {
-        const fullPath = basePath ? basePath + path3 : path3;
-        __privateGet(this, _app).use(fullPath, route);
-      });
+    const { subject, html } = template;
+    return _NodeMailerService.transporter.sendMail({
+      from: _NodeMailerService.defaultFrom,
+      to,
+      subject,
+      html
     });
   }
-  /**
-   * Check if app is initialized
-   */
-  static isInitialized() {
-    return __privateGet(this, _initialized4);
-  }
 };
-_app = new WeakMap();
-_initialized4 = new WeakMap();
-_ExpressPack_static = new WeakSet();
-applyMiddleware_fn = function({ key, value }) {
-  switch (key) {
-    case "bodyParser":
-      BodyParser.init({ app: __privateGet(this, _app), customConfig: value });
-      break;
-    case "cors":
-      Cors.init({ app: __privateGet(this, _app), customConfig: value });
-      break;
-    case "env":
-      DotEnv.init({ customPath: value });
-      break;
-    case "logger":
-      LoggerHandler.init(value);
-      __privateGet(this, _app).use(LoggerHandler.middleware());
-      break;
-    case "security":
-      SecurityHandler.init({ app: __privateGet(this, _app), customConfig: value });
-      break;
-    case "compression":
-      CompressionHandler.init({
-        app: __privateGet(this, _app),
-        customConfig: value
-      });
-      break;
-    case "express-rate-limit":
-      RateLimitHandler.init({
-        app: __privateGet(this, _app),
-        customConfig: value
-      });
-      break;
-    default:
-      console.warn(`[ExpressPack] Unknown middleware key: ${key}`);
-  }
-};
-__privateAdd(ExpressPack, _ExpressPack_static);
-__privateAdd(ExpressPack, _app, null);
-__privateAdd(ExpressPack, _initialized4, false);
-
-// src/middleware/auth-middleware/index.ts
-import jwt from "jsonwebtoken";
-var AuthMiddlewareHandler = class {
-  static AuthMiddleware({
-    userAuth = {},
-    roleAuth = {},
-    scopeAuth = {}
-  }) {
-    if (userAuth && Object.keys(userAuth).length) {
-      return this.authenticateUser(userAuth);
-    }
-    if (roleAuth && Object.keys(roleAuth).length) {
-      return this.authorizeRole(roleAuth);
-    }
-    if (scopeAuth && Object.keys(scopeAuth).length) {
-      return this.authorizeScope(scopeAuth);
-    }
-    return (req, res, next) => next();
-  }
-  static authenticateUser({
-    secret,
-    headerKey = "authorization",
-    usingBearer = true
-  }) {
-    return (req, res, next) => {
-      const token = this.extractToken({ req, headerKey, usingBearer });
-      if (!token) {
-        return res.status(401).json({ message: "Authorization token not found" });
-      }
-      try {
-        const decoded = jwt.verify(token, secret || process.env.JWT_SECRET);
-        req.user = decoded;
-        next();
-      } catch (err) {
-        return res.status(403).json({ message: "Invalid token" });
-      }
-    };
-  }
-  static authorizeRole({
-    allowedRoles = [],
-    checkAll = true
-  }) {
-    return (req, res, next) => {
-      const userRole = req.user?.role;
-      if (!userRole) {
-        return res.status(403).json({
-          status: "forbidden",
-          message: "No role found for the authenticated user. Please ensure your token includes a role."
-        });
-      }
-      if (!allowedRoles.includes(userRole)) {
-        return res.status(403).json({
-          status: "forbidden",
-          message: `Access denied. Required role(s): [${allowedRoles.join(
-            ", "
-          )}], but found: ${userRole}.`
-        });
-      }
-      next();
-    };
-  }
-  static authorizeScope({
-    requiredScopes = [],
-    checkAll = true
-  }) {
-    return (req, res, next) => {
-      const userScopes = req.user?.scopes || [];
-      let haveScope = false;
-      if (checkAll) {
-        haveScope = requiredScopes.every((scope) => userScopes.includes(scope));
-      } else {
-        haveScope = requiredScopes.some((scope) => userScopes.includes(scope));
-      }
-      if (haveScope) {
-        return next();
-      }
-      const missingScopes = requiredScopes.filter(
-        (scope) => !userScopes.includes(scope)
-      );
-      return res.status(403).json({
-        error: "Forbidden",
-        message: `Insufficient permissions. Missing required scope(s): [${missingScopes.join(
-          ", "
-        )}].`,
-        userScopes
-      });
-    };
-  }
-  static extractToken({
-    req,
-    headerKey = "authorization",
-    usingBearer = true
-  }) {
-    const headerValue = req.headers[headerKey.toLowerCase()];
-    if (!headerValue) return void 0;
-    return usingBearer ? headerValue.split(" ")[1] : headerValue;
-  }
-};
-
-// src/middleware/request-tracer/index.ts
-var RequestTracer = class {
-  static addRequestId(req, res, next) {
-    const requestId = req.headers["x-request-id"] || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    req.requestId = requestId;
-    res.setHeader("X-Request-ID", requestId);
-    next();
-  }
-};
-
-// src/middleware/request-validator/index.ts
-import { ZodError } from "zod";
-var RequestValidator = class {
-  static validateRequest({ params, query, body }) {
-    return (req, res, next) => {
-      try {
-        const parsed = {
-          ...params ? params.parse(req.params) : {},
-          ...query ? query.parse(req.query) : {},
-          ...body ? body.parse(req.body) : {}
-        };
-        req.data = parsed;
-        next();
-      } catch (err) {
-        if (err instanceof ZodError) {
-          return res.status(400).json({ error: err.flatten() });
-        }
-        return res.status(500).json({ error: "Internal Server Error" });
-      }
-    };
-  }
-};
+_NodeMailerService.transporter = null;
+_NodeMailerService.defaultFrom = process?.env?.DEFAULT_EMAIL_FROM;
+var NodeMailerService = _NodeMailerService;
 
 // src/third-party/axios/index.ts
 import axios from "axios";
@@ -1400,14 +1540,14 @@ var _AxiosHelper = class _AxiosHelper {
 _AxiosHelper.instance = null;
 var AxiosHelper = _AxiosHelper;
 
-// src/third-party/cron/index.ts
+// src/service/scheduler/cron/index.ts
 import { schedule } from "node-cron";
 import Redlock from "redlock";
 import axios2 from "axios";
 import { format as format2 } from "date-fns";
 import { randomBytes } from "crypto";
 
-// src/third-party/redis/index.ts
+// src/service/cache/redis/index.ts
 import Redis from "ioredis";
 var _RedisClientService = class _RedisClientService {
   constructor() {
@@ -1535,7 +1675,7 @@ _RedisClientService.connected = false;
 _RedisClientService.isRedisEnabled = false;
 var RedisClientService = _RedisClientService;
 
-// src/third-party/cron/index.ts
+// src/service/scheduler/cron/index.ts
 var CronManager = class {
   constructor({
     serviceName,
@@ -1776,259 +1916,7 @@ var CronManager = class {
   }
 };
 
-// src/third-party/node-mailer/transporter/index.ts
-import nodemailer from "nodemailer";
-var EmailTransporter = class {
-  static create() {
-    return nodemailer.createTransport({
-      host: process?.env?.SMTP_HOST,
-      port: process?.env?.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587,
-      secure: process?.env?.SMTP_SECURE === "true",
-      auth: {
-        user: process?.env?.SMTP_USER,
-        pass: process?.env?.SMTP_PASS
-      }
-    });
-  }
-};
-
-// src/config/email-template/index.ts
-var email_template_default = {
-  welcome: ({ data }) => ({
-    subject: `Welcome, ${data?.name}`,
-    html: `<h1>Hello ${data?.name},</h1><p>We're happy to have you!</p>`
-  }),
-  resetPassword: ({ data }) => ({
-    subject: "Reset Your Password",
-    html: `<p>Click <a href="https://example.com/reset/${data?.token}">here</a> to reset your password.</p>`
-  }),
-  orderConfirmed: ({ data }) => ({
-    subject: `Order #${data?.orderId} Confirmed`,
-    html: `<p>Your order <strong>#${data?.orderId}</strong> has been confirmed.</p>`
-  })
-};
-
-// src/third-party/node-mailer/email-service/index.ts
-var _EmailService = class _EmailService {
-  static init() {
-    if (!_EmailService.transporter) {
-      _EmailService.transporter = EmailTransporter.create();
-    }
-  }
-  static async getTemplate({
-    templateName,
-    templateParams
-  }) {
-    return email_template_default?.[templateName]?.({
-      data: templateParams
-    });
-  }
-  static async sendEmail({
-    to,
-    templateName,
-    templateParams = {}
-  }) {
-    if (!_EmailService.transporter) {
-      throw new Error("EmailService not initialized. Please initialize first.");
-    }
-    const template = await _EmailService.getTemplate({
-      templateName,
-      templateParams
-    });
-    if (!template) {
-      throw new Error(`Template '${templateName}' not found`);
-    }
-    const { subject, html } = template;
-    return _EmailService.transporter.sendMail({
-      from: _EmailService.defaultFrom,
-      to,
-      subject,
-      html
-    });
-  }
-};
-_EmailService.transporter = null;
-_EmailService.defaultFrom = process?.env?.DEFAULT_EMAIL_FROM;
-var EmailService = _EmailService;
-
-// src/third-party/rabbitmq/index.ts
-import * as amqplib from "amqplib";
-var _RabbitMQService_static, connect_fn2, reconnect_fn2, setupExchanges_fn, setupQueues_fn, setupConsumer_fn, reRegisterConsumers_fn;
-var _RabbitMQService = class _RabbitMQService {
-  static async init(config8) {
-    var _a;
-    if (_RabbitMQService.isInitialized || !config8?.enabled) return;
-    console.log("I am trying to initialize the RabbitMQService");
-    _RabbitMQService.enabled = true;
-    _RabbitMQService.config = config8;
-    _RabbitMQService.isInitialized = true;
-    await __privateMethod(_a = _RabbitMQService, _RabbitMQService_static, connect_fn2).call(_a);
-  }
-  static getChannel() {
-    if (!_RabbitMQService.channel)
-      throw new Error("RabbitMQService not initialized");
-    return _RabbitMQService.channel;
-  }
-  static async publishToExchange(exchange, routingKey, message) {
-    if (!_RabbitMQService.channel)
-      throw new Error("RabbitMQService not connected");
-    const buffer = Buffer.from(JSON.stringify(message));
-    _RabbitMQService.channel.publish(exchange, routingKey, buffer, {
-      persistent: true
-    });
-  }
-  static async publishToQueue(queue, message) {
-    if (!_RabbitMQService.channel)
-      throw new Error("RabbitMQService not connected");
-    const buffer = Buffer.from(JSON.stringify(message));
-    _RabbitMQService.channel.sendToQueue(queue, buffer, { persistent: true });
-  }
-  static async consume(queue, handler, options = {}) {
-    var _a;
-    _RabbitMQService.consumers.push({ queue, handler, options });
-    if (!_RabbitMQService.channel) {
-      console.warn(
-        `[RabbitMQService] Consumer for "${queue}" registered before initialization. Will activate after connection.`
-      );
-      return;
-    }
-    await __privateMethod(_a = _RabbitMQService, _RabbitMQService_static, setupConsumer_fn).call(_a, queue, handler, options);
-  }
-};
-_RabbitMQService_static = new WeakSet();
-connect_fn2 = async function() {
-  var _a, _b, _c, _d;
-  try {
-    if (!_RabbitMQService.config) throw new Error("Config not set");
-    _RabbitMQService.connection = await amqplib.connect(
-      _RabbitMQService.config.uri
-    );
-    _RabbitMQService.connection?.on("error", (err) => {
-      var _a2;
-      console.error("[RabbitMQService] Connection error event:", err);
-      __privateMethod(_a2 = _RabbitMQService, _RabbitMQService_static, reconnect_fn2).call(_a2);
-    });
-    _RabbitMQService.connection?.on("close", () => {
-      var _a2;
-      console.warn("[RabbitMQService] Connection closed, reconnecting...");
-      __privateMethod(_a2 = _RabbitMQService, _RabbitMQService_static, reconnect_fn2).call(_a2);
-    });
-    _RabbitMQService.channel = await _RabbitMQService.connection?.createChannel();
-    if (_RabbitMQService.config.prefetch && _RabbitMQService.channel) {
-      _RabbitMQService.channel.prefetch(_RabbitMQService.config.prefetch);
-    }
-    await __privateMethod(_a = _RabbitMQService, _RabbitMQService_static, setupExchanges_fn).call(_a);
-    await __privateMethod(_b = _RabbitMQService, _RabbitMQService_static, setupQueues_fn).call(_b);
-    await __privateMethod(_c = _RabbitMQService, _RabbitMQService_static, reRegisterConsumers_fn).call(_c);
-    console.log("[RabbitMQService] Connected and configured.");
-  } catch (err) {
-    console.error("[RabbitMQService] Connection error:", err);
-    __privateMethod(_d = _RabbitMQService, _RabbitMQService_static, reconnect_fn2).call(_d);
-  }
-};
-reconnect_fn2 = async function() {
-  console.warn("[RabbitMQService] Reconnecting in 5s...");
-  setTimeout(() => {
-    var _a;
-    return __privateMethod(_a = _RabbitMQService, _RabbitMQService_static, connect_fn2).call(_a);
-  }, 5e3);
-};
-setupExchanges_fn = async function() {
-  if (!_RabbitMQService.config?.exchanges || !_RabbitMQService.channel) return;
-  for (const ex of _RabbitMQService.config.exchanges) {
-    await _RabbitMQService.channel.assertExchange(
-      ex.name,
-      ex.type,
-      ex.options || {}
-    );
-  }
-};
-setupQueues_fn = async function() {
-  if (!_RabbitMQService.config?.queues || !_RabbitMQService.channel) return;
-  for (const q of _RabbitMQService.config.queues) {
-    const options = q.options || {};
-    if (q.deadLetter) {
-      await _RabbitMQService.channel.assertExchange(
-        `${q.name}.dlx`,
-        "fanout",
-        { durable: true }
-      );
-      await _RabbitMQService.channel.assertQueue(`${q.name}.dlq`, {
-        durable: true
-      });
-      await _RabbitMQService.channel.bindQueue(
-        `${q.name}.dlq`,
-        `${q.name}.dlx`,
-        ""
-      );
-      options.deadLetterExchange = `${q.name}.dlx`;
-    }
-    await _RabbitMQService.channel.assertQueue(q.name, options);
-    if (q.bindTo) {
-      await _RabbitMQService.channel.bindQueue(
-        q.name,
-        q.bindTo.exchange,
-        q.bindTo.routingKey || ""
-      );
-    }
-  }
-};
-setupConsumer_fn = async function(queue, handler, options = {}) {
-  const retryLimit = options.retryAttempts ?? 3;
-  const retryDelay = options.retryDelayMs ?? 1e3;
-  const channel = _RabbitMQService.getChannel();
-  await channel.consume(queue, async (msg) => {
-    if (!msg) return;
-    const content = JSON.parse(msg.content.toString());
-    let attempts = 0;
-    const attempt = async () => {
-      try {
-        await handler(content);
-        channel.ack(msg);
-      } catch (err) {
-        attempts++;
-        if (attempts <= retryLimit) {
-          console.warn(
-            `[RabbitMQService] Retry attempt ${attempts} for queue "${queue}"`
-          );
-          setTimeout(attempt, retryDelay);
-        } else {
-          console.error(
-            `[RabbitMQService] Failed after ${retryLimit} attempts for queue "${queue}"`,
-            err
-          );
-          channel.nack(msg, false, false);
-        }
-      }
-    };
-    attempt();
-  });
-};
-reRegisterConsumers_fn = async function() {
-  var _a;
-  if (!_RabbitMQService.consumers.length) return;
-  console.log("[RabbitMQService] Re-registering consumers...");
-  for (const { queue, handler, options } of _RabbitMQService.consumers) {
-    try {
-      await __privateMethod(_a = _RabbitMQService, _RabbitMQService_static, setupConsumer_fn).call(_a, queue, handler, options);
-    } catch (err) {
-      console.error(
-        `[RabbitMQService] Error re-registering consumer for queue "${queue}"`,
-        err
-      );
-    }
-  }
-};
-__privateAdd(_RabbitMQService, _RabbitMQService_static);
-_RabbitMQService.enabled = false;
-_RabbitMQService.config = null;
-_RabbitMQService.connection = null;
-_RabbitMQService.channel = null;
-_RabbitMQService.isInitialized = false;
-_RabbitMQService.consumers = [];
-var RabbitMQService = _RabbitMQService;
-
-// src/third-party/s3/index.ts
+// src/service/storage/s3/index.ts
 import {
   S3Client,
   PutObjectCommand,
@@ -2950,103 +2838,6 @@ var DateUtilValidate = class {
   }
 };
 
-// src/util/jwt/index.ts
-import jwt2 from "jsonwebtoken";
-var JWTUtil = class {
-  static async generateTokens({
-    tokenPayload,
-    refreshTokenPayload = {},
-    generateRefreshToken = false
-  }) {
-    if (!tokenPayload) {
-      throw new Error("Token payload is needed to generate the token");
-    }
-    const secret = tokenPayload.JWT_SECRET || process?.env?.JWT_SECRET || "";
-    if (!secret) {
-      throw new Error("JWT secret is required");
-    }
-    const expiresIn = tokenPayload.expiresIn ? tokenPayload.expiresIn : void 0;
-    const signOptions = {};
-    if (expiresIn) {
-      signOptions.expiresIn = process?.env?.ACCESS_TOKEN_EXPIRE_TIME || "25m";
-    }
-    if (generateRefreshToken) {
-      return {
-        accessToken: jwt2.sign(tokenPayload.payload || {}, secret, signOptions),
-        refreshToken: await this.generateRefreshToken({
-          payload: tokenPayload.payload,
-          ...refreshTokenPayload
-        })
-      };
-    } else {
-      const { payload } = tokenPayload;
-      return jwt2.sign(payload || {}, secret, signOptions);
-    }
-  }
-  static async generateRefreshToken({
-    payload,
-    REFRESH_SECRET = process?.env?.REFRESH_SECRET || "",
-    expiresIn = "7d"
-  }) {
-    if (!payload) {
-      throw new Error("Token payload is needed to generate the token");
-    }
-    if (!REFRESH_SECRET) {
-      throw new Error("Refresh secret is required");
-    }
-    const signOptions = {};
-    if (expiresIn) {
-      signOptions.expiresIn = process.env.REFRESH_TOKEN_EXPIRE_TOKEN || "7d";
-    }
-    return jwt2.sign(payload, REFRESH_SECRET, signOptions);
-  }
-  static async verify({ token, JWT_SECRET = "" }) {
-    try {
-      const secret = JWT_SECRET || process?.env?.JWT_SECRET || "";
-      if (!secret) throw new Error("JWT secret is required for verification");
-      return jwt2.verify(token, secret);
-    } catch (err) {
-      if (err.name === "TokenExpiredError") throw new TokenExpiredError();
-      if (err.name === "JsonWebTokenError") throw new TokenInvalidError();
-      throw err;
-    }
-  }
-  static decode({ token }) {
-    return jwt2.decode(token);
-  }
-  static async verifyRefreshToken({
-    token,
-    REFRESH_SECRET = process?.env?.REFRESH_SECRET || ""
-  }) {
-    try {
-      if (!REFRESH_SECRET) {
-        throw new Error("Refresh secret is required for verification");
-      }
-      const payload = jwt2.verify(token, REFRESH_SECRET);
-      return payload;
-    } catch {
-      throw new TokenInvalidError("Refresh token is invalid");
-    }
-  }
-  static async refreshAccessToken({
-    token,
-    REFRESH_SECRET,
-    JWT_SECRET
-  }) {
-    const payload = await this.verifyRefreshToken({ token, REFRESH_SECRET });
-    if (payload) {
-      return this.generateTokens({
-        tokenPayload: {
-          payload,
-          JWT_SECRET,
-          expiresIn: process?.env?.ACCESS_TOKEN_EXPIRE_TIME || "25m"
-        }
-      });
-    }
-    return null;
-  }
-};
-
 // src/util/i18n/index.ts
 import i18next from "i18next";
 var config7 = {};
@@ -3196,7 +2987,7 @@ var EncryptionUtil = class {
 };
 export {
   AsyncRouteWrapper,
-  AuthMiddlewareHandler,
+  AuthMiddleware,
   AxiosHelper,
   BodyParser,
   CompressionHandler,
@@ -3213,22 +3004,19 @@ export {
   DateUtilValidate,
   DateUtilsRange,
   DotEnv,
-  EmailService,
   EncryptionUtil,
   ErrorHandler,
   ExpressPack,
   JWTUtil,
   LodashHelper,
   LoggerHandler,
-  ModelBuilder,
-  Mongoose,
   MongooseCorePlugin,
   MongoosePerformancePlugin,
   MongoosePopulatePlugin,
   MongooseSecurityPlugin,
-  RabbitMQService,
+  NodeMailerService,
+  PassportService,
   RateLimitHandler,
-  RedisClientService,
   RequestTracer,
   RequestValidator,
   ResponseUtil,

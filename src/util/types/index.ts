@@ -15,9 +15,6 @@ export * from "./encryption/index";
 // i8n types
 export * from "./i8n/index";
 
-// jwt types
-export * from "./jwt/index";
-
 // lodash types
 export * from "./lodash/index";
 
