@@ -17,7 +17,7 @@ const sessionConfig = {
     };
 
     return {
-      secret: process.env.SESSION_SECRET || "default_secret_change_me",
+      secret: process.env.SESSION_SECRET || "d9X#7vLp@8QwR!ZmFs3$GtjB2kVyN&Hz0",
       resave: false,
       saveUninitialized: false,
       rolling: false,

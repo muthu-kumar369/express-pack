@@ -73,6 +73,7 @@ __export(index_exports, {
   RequestValidator: () => RequestValidator,
   ResponseUtil: () => ResponseUtil,
   S3Service: () => S3Service,
+  SMSService: () => SMSService,
   SecurityHandler: () => SecurityHandler,
   TokenBlacklistedError: () => TokenBlacklistedError,
   TokenExpiredError: () => TokenExpiredError,
@@ -150,7 +151,7 @@ var JWTUtil = class {
       throw new Error("Refresh secret is required");
     }
     const signOptions = {};
-    if (expiresIn) {
+    if (!expiresIn) {
       signOptions.expiresIn = process.env.REFRESH_TOKEN_EXPIRE_TOKEN || "7d";
     }
     return import_jsonwebtoken.default.sign(payload, REFRESH_SECRET, signOptions);
@@ -274,7 +275,7 @@ var AuthMiddleware = class {
         return res.status(401).json({ message: "Authorization token not found" });
       }
       try {
-        const decoded = import_jsonwebtoken2.default.verify(token, secret || process.env.JWT_SECRET);
+        const decoded = import_jsonwebtoken2.default.verify(token, secret);
         req.user = decoded;
         next();
       } catch (err) {
@@ -848,7 +849,7 @@ var sessionConfig = {
       expires: void 0
     };
     return {
-      secret: process.env.SESSION_SECRET || "default_secret_change_me",
+      secret: process.env.SESSION_SECRET || "d9X#7vLp@8QwR!ZmFs3$GtjB2kVyN&Hz0",
       resave: false,
       saveUninitialized: false,
       rolling: false,
@@ -1530,6 +1531,72 @@ _NodeMailerService.transporter = null;
 _NodeMailerService.defaultFrom = process?.env?.DEFAULT_EMAIL_FROM;
 var NodeMailerService = _NodeMailerService;
 
+// src/service/message/sms/twilio/index.ts
+var import_twilio = __toESM(require("twilio"), 1);
+var import_handlebars = __toESM(require("handlebars"), 1);
+var _SMSService = class _SMSService {
+  constructor() {
+  }
+  static init(config8) {
+    if (!config8.accountSid || !config8.authToken || !config8.fromNumber) {
+      throw new Error(
+        "Twilio accountSid, authToken, and fromNumber are required"
+      );
+    }
+    _SMSService.client = (0, import_twilio.default)(config8.accountSid, config8.authToken);
+    _SMSService.fromNumber = config8.fromNumber;
+    _SMSService.logger = config8.logger || _SMSService.logger;
+    if (!_SMSService.instance) {
+      _SMSService.instance = new _SMSService();
+    }
+  }
+  static async sendSMS(options) {
+    if (!_SMSService.instance) {
+      throw new Error("SMSService is not initialized. Call init() first.");
+    }
+    try {
+      await _SMSService.client.messages.create({
+        to: options.to,
+        from: _SMSService.fromNumber,
+        body: options.body
+      });
+      _SMSService.logger(`SMS sent to ${options.to}`);
+    } catch (error) {
+      _SMSService.logger("Error sending SMS", error);
+      throw error;
+    }
+  }
+  static async sendTemplatedSMS(options) {
+    if (!_SMSService.instance) {
+      throw new Error("SMSService is not initialized. Call init() first.");
+    }
+    if (!options.template) {
+      throw new Error("Template name is required for templated SMS.");
+    }
+    const renderedBody = await _SMSService.renderTemplate(
+      options.template,
+      options.dynamicData
+    );
+    await _SMSService.sendSMS({
+      to: options.to,
+      body: renderedBody
+    });
+  }
+  static async renderTemplate(template, data) {
+    try {
+      const compiled = import_handlebars.default.compile(template);
+      return compiled(data);
+    } catch (err) {
+      _SMSService.logger(`Error rendering SMS template: ${template}`, err);
+      throw err;
+    }
+  }
+};
+_SMSService.instance = null;
+_SMSService.fromNumber = "";
+_SMSService.logger = console.log;
+var SMSService = _SMSService;
+
 // src/third-party/axios/index.ts
 var import_axios = __toESM(require("axios"), 1);
 var _AxiosHelper = class _AxiosHelper {
@@ -1632,21 +1699,21 @@ var _RedisClientService = class _RedisClientService {
     }
     _RedisClientService.instance = this;
   }
-  static enableRedis(enable = true) {
+  static enableRedis(enable = true, config8) {
     _RedisClientService.isRedisEnabled = enable;
     if (enable) {
-      _RedisClientService.init();
+      _RedisClientService.init(config8);
     } else {
       _RedisClientService.disconnect();
     }
   }
-  static init() {
+  static init(config8) {
     if (_RedisClientService.isRedisEnabled && !_RedisClientService.connected) {
       _RedisClientService.redis = new import_ioredis.default({
-        host: process.env.REDIS_HOST || "localhost",
-        port: Number(process.env.REDIS_PORT) || 6379,
-        password: process.env.REDIS_PASSWORD || void 0,
-        db: Number(process.env.REDIS_DB) || 0
+        host: config8.REDIS_HOST || "localhost",
+        port: Number(config8.REDIS_PORT) || 6379,
+        password: config8.REDIS_PASSWORD || void 0,
+        db: Number(config8.REDIS_DB) || 0
       });
       _RedisClientService.redis.on("connect", () => {
         _RedisClientService.connected = true;
@@ -3023,6 +3090,7 @@ var EncryptionUtil = class {
   RequestValidator,
   ResponseUtil,
   S3Service,
+  SMSService,
   SecurityHandler,
   TokenBlacklistedError,
   TokenExpiredError,

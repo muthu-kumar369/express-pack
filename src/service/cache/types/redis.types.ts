@@ -4,6 +4,13 @@ export interface RedisSetOptions {
   expire?: number; // expiration time in seconds
 }
 
+export interface RedisClientOptions {
+  REDIS_HOST?: string;
+  REDIS_PORT?: number;
+  REDIS_PASSWORD?: string;
+  REDIS_DB?: number;
+}
+
 // Redis is the class itself (type), so RedisInstance can be Redis or null
 export type RedisInstance = Redis | null;
 

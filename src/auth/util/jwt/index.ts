@@ -69,7 +69,7 @@ export class JWTUtil {
     }
 
     const signOptions: SignOptions = {};
-    if (expiresIn) {
+    if (!expiresIn) {
       signOptions.expiresIn = (process.env.REFRESH_TOKEN_EXPIRE_TOKEN ||
         "7d") as StringValue;
     }

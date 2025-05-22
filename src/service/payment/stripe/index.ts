@@ -16,7 +16,7 @@ export class StripeService {
   // -----------------------
   static init(secretKey: string, config?: InitializeConfig): void {
     if (!this.stripe) {
-      this.stripe = new Stripe(process.env?.STRIPE_SECRET_KEY || secretKey);
+      this.stripe = new Stripe(secretKey);
 
       this.webhookSecret = config?.webhookSecret;
       if (config?.logFn) this.logFn = config.logFn;

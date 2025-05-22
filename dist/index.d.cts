@@ -498,6 +498,35 @@ declare class NodeMailerService {
     static sendEmail({ to, templateName, templateParams, }: SendEmailParams): Promise<any>;
 }
 
+interface TwilioSMSInitConfig {
+    accountSid: string;
+    authToken: string;
+    fromNumber: string;
+    templateDir?: string;
+    logger?: (message: string, error?: any) => void;
+}
+interface TwilioSMSOptions {
+    to: string;
+    body: string;
+}
+interface TwilioTemplatedSMSOptions {
+    to: string;
+    template: string;
+    dynamicData: Record<string, any>;
+}
+
+declare class SMSService {
+    private static instance;
+    private static client;
+    private static fromNumber;
+    private static logger;
+    private constructor();
+    static init(config: TwilioSMSInitConfig): void;
+    static sendSMS(options: TwilioSMSOptions): Promise<void>;
+    static sendTemplatedSMS(options: TwilioTemplatedSMSOptions): Promise<void>;
+    private static renderTemplate;
+}
+
 declare class AxiosHelper {
     private static instance;
     private axiosInstance;
@@ -743,4 +772,4 @@ declare class EncryptionUtil {
     static decrypt({ encryptedText, key, }: DecryptParams): string;
 }
 
-export { AsyncRouteWrapper, AuthMiddleware, AxiosHelper, BodyParser, CompressionHandler, Cors, CronManager, DateUtilBusiness, DateUtilCompare, DateUtilCreate, DateUtilDuration, DateUtilEdgeCase, DateUtilFormat, DateUtilManipulate, DateUtilTimezone, DateUtilValidate, DateUtilsRange, DotEnv, EncryptionUtil, ErrorHandler, ExpressPack, JWTUtil, LodashHelper, LoggerHandler, MongooseCorePlugin, MongoosePerformancePlugin, MongoosePopulatePlugin, MongooseSecurityPlugin, NodeMailerService, PassportService, RateLimitHandler, RequestTracer, RequestValidator, ResponseUtil, S3Service, SecurityHandler, TokenBlacklistedError, TokenExpiredError, TokenInvalidError, availablePlugins, i18n, logger };
+export { AsyncRouteWrapper, AuthMiddleware, AxiosHelper, BodyParser, CompressionHandler, Cors, CronManager, DateUtilBusiness, DateUtilCompare, DateUtilCreate, DateUtilDuration, DateUtilEdgeCase, DateUtilFormat, DateUtilManipulate, DateUtilTimezone, DateUtilValidate, DateUtilsRange, DotEnv, EncryptionUtil, ErrorHandler, ExpressPack, JWTUtil, LodashHelper, LoggerHandler, MongooseCorePlugin, MongoosePerformancePlugin, MongoosePopulatePlugin, MongooseSecurityPlugin, NodeMailerService, PassportService, RateLimitHandler, RequestTracer, RequestValidator, ResponseUtil, S3Service, SMSService, SecurityHandler, TokenBlacklistedError, TokenExpiredError, TokenInvalidError, availablePlugins, i18n, logger };
