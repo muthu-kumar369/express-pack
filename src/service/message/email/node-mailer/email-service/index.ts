@@ -1,4 +1,4 @@
-import NodeMailerTransporter from "../transporter/index.js";
+import { NodeMailerTransporter } from "../transporter/index.js";
 import EmailTemplates from "../../../../../config/email-template/index.js";
 import type {
   EmailTemplate,

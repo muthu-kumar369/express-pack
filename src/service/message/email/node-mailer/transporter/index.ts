@@ -1,6 +1,6 @@
 import nodemailer, { Transporter } from "nodemailer";
 
-export default class NodeMailerTransporter {
+export class NodeMailerTransporter {
   static create(): Transporter {
     return nodemailer.createTransport({
       host: process?.env?.SMTP_HOST,
