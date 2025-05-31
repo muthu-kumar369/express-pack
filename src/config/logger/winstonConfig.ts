@@ -28,7 +28,9 @@ const config = {
     ],
     exitOnError: false,
   },
-  getConfig: (config = {}) => {
+  getConfig: (
+    config: Record<string, unknown> = {}
+  ): Record<string, unknown> => {
     return {
       level: config?.level || "info",
       format:

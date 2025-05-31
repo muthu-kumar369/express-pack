@@ -1,3 +1,5 @@
+import { HelmetOptions } from "helmet";
+
 const config = {
   securityConfig: {
     contentSecurityPolicy: false,
@@ -13,13 +15,14 @@ const config = {
     referrerPolicy: "no-referrer-when-downgrade",
     xssFilter: true,
   },
-  getConfig: (config = {}) => {
+  getConfig: (config: HelmetOptions = {}): HelmetOptions => {
     return {
       contentSecurityPolicy: config?.contentSecurityPolicy || false,
       crossOriginEmbedderPolicy: config?.crossOriginEmbedderPolicy || false,
-      crossOriginOpenerPolicy: config?.crossOriginEmbedderPolicy || false,
+      crossOriginOpenerPolicy:
+        (config?.crossOriginEmbedderPolicy as boolean) || false,
       dnsPrefetchControl: config?.dnsPrefetchControl || true,
-      frameguard: config?.frameguard || "sameorigin",
+      frameguard: (config?.frameguard as boolean) || true,
       hidePoweredBy: config?.hidePoweredBy || false,
       hsts: config?.hsts || {
         maxAge: 0,
@@ -29,7 +32,7 @@ const config = {
       ieNoOpen: config?.ieNoOpen || false,
       noSniff: config?.noSniff || false,
       originAgentCluster: config?.originAgentCluster || false,
-      referrerPolicy: config?.referrerPolicy || "no-referrer-when-downgrade",
+      referrerPolicy: config?.referrerPolicy || true,
       xssFilter: config?.xssFilter || true,
     };
   },

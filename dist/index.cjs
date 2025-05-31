@@ -728,9 +728,9 @@ var config5 = {
       // Enable legacy X-RateLimit-* headers
       standardHeaders: config8?.standardHeaders || "draft-6",
       // Use IETF draft-6 rate-limiting headers
-      identifier: config8?.identifier || null,
+      identifier: config8?.identifier || void 0,
       // Optional custom identifier for the policy
-      store: config8?.store || null,
+      store: config8?.store || void 0,
       // Uses in-memory store by default
       passOnStoreError: config8?.passOnStoreError || false,
       // Do not pass if store fails (defaults to false)
@@ -802,7 +802,7 @@ var config6 = {
       crossOriginEmbedderPolicy: config8?.crossOriginEmbedderPolicy || false,
       crossOriginOpenerPolicy: config8?.crossOriginEmbedderPolicy || false,
       dnsPrefetchControl: config8?.dnsPrefetchControl || true,
-      frameguard: config8?.frameguard || "sameorigin",
+      frameguard: config8?.frameguard || true,
       hidePoweredBy: config8?.hidePoweredBy || false,
       hsts: config8?.hsts || {
         maxAge: 0,
@@ -812,7 +812,7 @@ var config6 = {
       ieNoOpen: config8?.ieNoOpen || false,
       noSniff: config8?.noSniff || false,
       originAgentCluster: config8?.originAgentCluster || false,
-      referrerPolicy: config8?.referrerPolicy || "no-referrer-when-downgrade",
+      referrerPolicy: config8?.referrerPolicy || true,
       xssFilter: config8?.xssFilter || true
     };
   }
