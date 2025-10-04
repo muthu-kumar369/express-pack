@@ -6,7 +6,11 @@ import express, {
   Router,
   RequestHandler,
 } from "express";
-import { CompressionHandler, LoggerHandler, RateLimitHandler } from "../../../app";
+import {
+  CompressionHandler,
+  LoggerHandler,
+  RateLimitHandler,
+} from "../../../app";
 import { BodyParser, Cors, DotEnv } from "../../common/index";
 import { SecurityHandler } from "../../common/security/index";
 import { MiddlewareConfig, RouteGroup } from "./types";
@@ -23,13 +27,15 @@ export class ExpressPack {
    * @returns express app
    */
   static async init({
+    app,
     config = {},
   }: {
+    app: Application;
     config?: MiddlewareConfig;
   }): Promise<Application> {
     if (this.#initialized && this.#app) return this.#app;
 
-    this.#app = express();
+    this.#app = app;
 
     // Add request ID middleware once
     this.#app.use((req: Request, res: Response, next: NextFunction) => {

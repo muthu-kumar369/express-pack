@@ -11,4 +11,5 @@ export default defineConfig({
       js: format === "esm" ? ".mjs" : ".cjs",
     };
   },
+  external: ["express"],
 });

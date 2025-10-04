@@ -258,7 +258,8 @@ declare module "express-serve-static-core" {
 
 declare class ExpressPack {
     #private;
-    static init({ config, }: {
+    static init({ app, config, }: {
+        app: Application;
         config?: MiddlewareConfig;
     }): Promise<Application>;
     static getApp(): Application;

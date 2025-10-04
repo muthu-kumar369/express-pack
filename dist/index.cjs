@@ -874,10 +874,11 @@ var ExpressPack = class {
    * @returns express app
    */
   static async init({
+    app,
     config: config8 = {}
   }) {
     if (__privateGet(this, _initialized4) && __privateGet(this, _app)) return __privateGet(this, _app);
-    __privateSet(this, _app, (0, import_express.default)());
+    __privateSet(this, _app, app);
     __privateGet(this, _app).use((req, res, next) => {
       const requestId = req.headers["x-request-id"] || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       req.requestId = requestId;
