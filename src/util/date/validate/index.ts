@@ -6,7 +6,7 @@ import {
   isSameDay as checkSameDay,
 } from "date-fns";
 
-export class DateUtilValidate {
+export class DateUtilValidate { 
   static isValid(date: Date | string): boolean {
     return isValidDate(date);
   }
