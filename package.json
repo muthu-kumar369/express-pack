@@ -1,11 +1,12 @@
 {
   "name": "express-pack",
-  "version": "1.0.8",
-  "description": "express-pack is a powerful npm package designed to simplify setting up an Express.js application by integrating commonly used middleware like dotenv, winston, helmet, body-parser, and more. It eliminates the hassle of installing and configuring these essential dependencies, enabling developers to get started quickly and focus on building features. Key Features: Pre-configured Middleware: Includes common middleware like helmet for security, dotenv for environment variable management, body-parser for request parsing, and winston for logging. Customizable Configurations: Offers flexibility to override default configurations using simple JSON-like objects.Route Binding Simplified: Provides a BindRoutes method to easily manage and organize application routes.",
+  "version": "2.0.0",
+  "description": "🧩 express-pack is a powerful, modular, and scalable utility library that streamlines Express.js backend development. It provides a clean and extensible foundation for building robust enterprise-grade applications. With built-in modules for caching, messaging, job scheduling, authentication, authorization, multi-tenant handling, configuration management, and request validation, express-pack helps developers focus on business logic instead of repetitive setup. Each module is independently configurable and designed with clean architecture principles, offering flexibility, maintainability, and performance out of the box. Whether you are building a monolith or a microservice, express-pack provides the tools and patterns to keep your Express.js codebase organized, efficient, and production-ready.",
   "type": "module",
   "keywords": [
     "express",
     "middleware",
+    "typescript",
     "dotenv",
     "winston",
     "helmet",
