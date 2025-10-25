@@ -70,31 +70,27 @@ export class MongoosePerformancePlugin {
   static RetryHandler(
     schema: Schema<any>,
     options: RetryHandlerOptions = { retries: 3, delay: 1000 }
-  ): SchemaPlugin {
-    return function (schema: Schema) {
-      const { retries, delay } = options;
+  ) {
+    const { retries, delay } = options;
 
-      schema.pre("save", async function (next) {
-        let attempt = 0;
-        const saveWithRetry = async () => {
-          try {
-            // `this` refers to mongoose document here
-            await (this as any).save();
-            next();
-          } catch (err: any) {
-            if (attempt < retries) {
-              attempt++;
-              console.warn(
-                `Retrying save attempt #${attempt} due to error: ${err.message}`
-              );
-              setTimeout(saveWithRetry, delay);
-            } else {
-              next(err);
-            }
+    schema.methods.saveWithRetry = async function () {
+      let attempt = 0;
+
+      while (attempt <= retries) {
+        try {
+          return await this.save();
+        } catch (err: any) {
+          if (attempt < retries) {
+            attempt++;
+            console.warn(
+              `Retrying save attempt #${attempt} due to error: ${err.message}`
+            );
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          } else {
+            throw err;
           }
-        };
-        saveWithRetry();
-      });
+        }
+      }
     };
   }
 }

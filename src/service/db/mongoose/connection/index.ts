@@ -16,12 +16,12 @@ export class Mongoose {
 
     mongoose.connection.on("connected", () => {
       Mongoose.#isConnected = true;
-      console.log("[MongoDB] Connected");
+      console.info("[MongoDB] Connected");
     });
 
     mongoose.connection.on("disconnected", () => {
       Mongoose.#isConnected = false;
-      console.log("[MongoDB] Disconnected. Retrying in 5s...");
+      console.info("[MongoDB] Disconnected. Retrying in 5s...");
       setTimeout(() => Mongoose.#reconnect(), 5000);
     });
 

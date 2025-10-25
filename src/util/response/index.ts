@@ -14,7 +14,7 @@ export class ResponseUtil {
     const body = {
       success: config?.success,
       code: config?.code,
-      ...data,
+      ...(Object?.keys(data)?.length ? { data } : {}),
       ...(message && { message }),
       ...(req.requestId && { requestId: req.requestId }),
     };

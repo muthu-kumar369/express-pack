@@ -1,40 +1,39 @@
-// model.types.ts
 import {
-  SlugDocument,
-  SoftDeleteDocument,
-  Timestamps,
-  VersioningDocument,
+  AutoPopulateOptions,
+  FieldEncryptionOptions,
+  IndexManagerOptions,
+  MultiTenancyOptions,
+  PaginationModel,
+  PaginationOptions,
+  PaginationResult,
+  RetryHandlerOptions,
+  SchemaValidationOptions,
+  SmartPopulationOptions,
+  UniqueConstraintOptions,
 } from "@/plugin/types";
-import {
-  MongooseCorePlugin,
-  MongoosePerformancePlugin,
-  MongoosePopulatePlugin,
-  MongooseSecurityPlugin,
-} from "app";
 import mongoose from "mongoose";
 
+export interface ISlugGenerator {
+  sourceField?: string;
+  slugField?: string;
+  unique?: boolean;
+}
+
 export type PluginOptionsMap = {
-  timestamps: true;
-  softDelete: true;
-  slugGenerator: true;
-  versioning: true;
-  multiTenancy: true;
-  pagination: true;
-  indexManager: true;
-  retryHandler: true;
-  autoPopulate: true;
-  smartPopulate: true;
-  sanitize: true;
-  fieldEncryption: {
-    fields: string[];
-  };
-  uniqueConstraint: {
-    fields: string[];
-    messages?: Record<string, string>;
-  };
-  schemaValidation: {
-    validate: Record<string, any>; // can be replaced with Zod types if you're using Zod
-  };
+  timestamps: boolean;
+  softDelete: boolean;
+  slugGenerator: ISlugGenerator;
+  versioning: boolean;
+  multiTenancy: MultiTenancyOptions;
+  pagination: boolean;
+  indexManager: IndexManagerOptions;
+  retryHandler: RetryHandlerOptions;
+  autoPopulate: AutoPopulateOptions;
+  smartPopulate: SmartPopulationOptions;
+  sanitize: boolean;
+  fieldEncryption: FieldEncryptionOptions;
+  uniqueConstraint: UniqueConstraintOptions;
+  schemaValidation: SchemaValidationOptions;
 };
 
 export type PluginKey = keyof PluginOptionsMap;

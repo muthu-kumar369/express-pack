@@ -30,6 +30,7 @@ export class AuthMiddleware {
     // Default middleware if nothing is provided
     return (req: Request, res: Response, next: NextFunction) => next();
   }
+
   /**
    * Returns middleware for authenticating with a specific strategy
    */
@@ -41,12 +42,19 @@ export class AuthMiddleware {
     return passport.authenticate(strategy, options, callback);
   }
 
-  static authenticateUser({
-    secret,
-    headerKey = "authorization",
-    usingBearer = true,
-  }: AuthenticateUserOptions) {
-    return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  static authenticateUser(options: AuthenticateUserOptions) {
+    return async (
+      req: AuthenticatedRequest,
+      res: Response,
+      next: NextFunction
+    ) => {
+      const {
+        secret = process.env.JWT_SECRET,
+        headerKey = "authorization",
+        usingBearer = true,
+        callback,
+      } = options;
+
       const token = this.extractToken({ req, headerKey, usingBearer });
 
       if (!token) {
@@ -56,10 +64,18 @@ export class AuthMiddleware {
       }
 
       try {
-        const decoded = jwt.verify(token, secret as string);
+        const jwtSecret = secret || process.env.JWT_SECRET;
 
-        req.user = decoded;
-        next();
+        const decoded: any = jwt.verify(token, jwtSecret as string);
+
+        if (callback) {
+          const user = await callback(decoded);
+          req.user = user ? user : decoded;
+        } else {
+          req.user = decoded;
+        }
+
+        return next();
       } catch (err) {
         return res.status(403).json({ message: "Invalid token" });
       }
@@ -71,26 +87,45 @@ export class AuthMiddleware {
     checkAll = true,
   }: AuthorizeRoleOptions) {
     return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-      const userRole = req.user?.role;
+      const userRoles: string[] = Array.isArray(req.user?.role)
+        ? req.user.role
+        : req.user?.role
+        ? [req.user.role]
+        : [];
 
-      if (!userRole) {
+      if (!userRoles.length) {
         return res.status(403).json({
-          status: "forbidden",
+          error: "Forbidden",
           message:
-            "No role found for the authenticated user. Please ensure your token includes a role.",
+            "No role(s) found for the authenticated user. Please ensure your token includes a valid role field.",
         });
       }
 
-      if (!allowedRoles.includes(userRole)) {
-        return res.status(403).json({
-          status: "forbidden",
-          message: `Access denied. Required role(s): [${allowedRoles.join(
-            ", "
-          )}], but found: ${userRole}.`,
-        });
+      let hasRole = false;
+      if (checkAll) {
+        // ✅ All allowedRoles must be present in user's roles
+        hasRole = allowedRoles.every((role) => userRoles.includes(role));
+      } else {
+        // ✅ At least one allowedRole must match user's roles
+        hasRole = allowedRoles.some((role) => userRoles.includes(role));
       }
 
-      next();
+      if (hasRole) return next();
+
+      // Identify which roles are missing
+      const missingRoles = allowedRoles.filter((r) => !userRoles.includes(r));
+
+      return res.status(403).json({
+        error: "Forbidden",
+        message: checkAll
+          ? `Access denied. Missing required role(s): [${missingRoles.join(
+              ", "
+            )}] to access this resource.`
+          : `Access denied. You need at least one of the following roles: [${allowedRoles.join(
+              ", "
+            )}]. Found role(s): [${userRoles.join(", ")}].`,
+        userRoles,
+      });
     };
   }
 

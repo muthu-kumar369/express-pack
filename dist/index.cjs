@@ -62,25 +62,31 @@ __export(index_exports, {
   JWTUtil: () => JWTUtil,
   LodashHelper: () => LodashHelper,
   LoggerHandler: () => LoggerHandler,
+  ModelBuilder: () => ModelBuilder,
+  Mongoose: () => Mongoose,
   MongooseCorePlugin: () => MongooseCorePlugin,
   MongoosePerformancePlugin: () => MongoosePerformancePlugin,
   MongoosePopulatePlugin: () => MongoosePopulatePlugin,
   MongooseSecurityPlugin: () => MongooseSecurityPlugin,
   NodeMailerService: () => NodeMailerService,
   PassportService: () => PassportService,
+  RabbitMQService: () => RabbitMQService,
   RateLimitHandler: () => RateLimitHandler,
+  RedisClientService: () => RedisClientService,
   RequestTracer: () => RequestTracer,
   RequestValidator: () => RequestValidator,
   ResponseUtil: () => ResponseUtil,
   S3Service: () => S3Service,
   SMSService: () => SMSService,
   SecurityHandler: () => SecurityHandler,
+  StripeService: () => StripeService,
   TokenBlacklistedError: () => TokenBlacklistedError,
   TokenExpiredError: () => TokenExpiredError,
   TokenInvalidError: () => TokenInvalidError,
   availablePlugins: () => availablePlugins,
   i18n: () => i18n,
-  logger: () => logger
+  logger: () => logger,
+  z: () => z2
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -264,20 +270,28 @@ var AuthMiddleware = class {
   static authenticatePassport(strategy, options, callback) {
     return import_passport2.default.authenticate(strategy, options, callback);
   }
-  static authenticateUser({
-    secret,
-    headerKey = "authorization",
-    usingBearer = true
-  }) {
-    return (req, res, next) => {
+  static authenticateUser(options) {
+    return async (req, res, next) => {
+      const {
+        secret = process.env.JWT_SECRET,
+        headerKey = "authorization",
+        usingBearer = true,
+        callback
+      } = options;
       const token = this.extractToken({ req, headerKey, usingBearer });
       if (!token) {
         return res.status(401).json({ message: "Authorization token not found" });
       }
       try {
-        const decoded = import_jsonwebtoken2.default.verify(token, secret);
-        req.user = decoded;
-        next();
+        const jwtSecret = secret || process.env.JWT_SECRET;
+        const decoded = import_jsonwebtoken2.default.verify(token, jwtSecret);
+        if (callback) {
+          const user = await callback(decoded);
+          req.user = user ? user : decoded;
+        } else {
+          req.user = decoded;
+        }
+        return next();
       } catch (err) {
         return res.status(403).json({ message: "Invalid token" });
       }
@@ -1031,7 +1045,7 @@ var MongooseCorePlugin = class {
       }
     );
   }
-  static SoftDelete(schema, option) {
+  static SoftDelete(schema) {
     schema.add({
       isDeleted: { type: Boolean, default: false },
       deletedAt: { type: Date, default: null }
@@ -1077,7 +1091,9 @@ var MongooseCorePlugin = class {
           if (this._id) query._id = { $ne: this._id };
           const ModelConstructor = this.constructor;
           const checkUniqueness = async () => {
-            const existing = await ModelConstructor.exists(query);
+            const existing = await ModelConstructor.exists(query).setOptions({
+              skipTenantCheck: true
+            });
             if (existing) {
               slug = `${baseSlug}-${count++}`;
               query[slugField] = slug;
@@ -1096,56 +1112,55 @@ var MongooseCorePlugin = class {
     schema.add({
       [versionField]: { type: Array, default: [] }
     });
-    schema.pre(
-      "save",
-      async function(next) {
-        if (!this.isNew && this.isModified()) {
-          const clone = this.toObject({ depopulate: true });
-          delete clone[versionField];
-          this[versionField] = this[versionField] || [];
-          this[versionField].push({
-            version: this[versionField].length + 1,
-            data: clone,
-            savedAt: /* @__PURE__ */ new Date()
-          });
-          if (this[versionField].length > 10) {
-            this[versionField].shift();
-          }
+    schema.pre("save", function(next) {
+      if (!this.isNew && this.isModified()) {
+        const clone = this.toObject({
+          depopulate: true,
+          virtuals: false,
+          getters: false
+        });
+        delete clone[versionField];
+        this[versionField] = this[versionField] || [];
+        this[versionField].push({
+          version: this[versionField].length + 1,
+          data: clone,
+          savedAt: /* @__PURE__ */ new Date()
+        });
+        if (this[versionField].length > 10) {
+          this[versionField].shift();
         }
-        next();
       }
-    );
+      next();
+    });
   }
   static MultiTenancy(schema, options = {}) {
     const field = options.field || "shopId";
     schema.add({ [field]: { type: String, required: true, index: true } });
     const addTenantScope = function(next) {
+      const op = this.op;
+      const skipTenantCheck = this.getOptions()?.skipTenantCheck;
+      if (skipTenantCheck || op === "save") {
+        return next();
+      }
       if (!this.getQuery()[field] && this.options?.tenantId) {
         this.where({ [field]: this.options.tenantId });
       }
-      if (!this.getQuery()[field]) {
-        const error = new Error("Tenant ID is required but was not provided.");
-        next(error);
-        return;
+      if (!this.getQuery()[field] && !this.options?.tenantId) {
+        return next(new Error("Tenant ID is required but was not provided."));
       }
       next();
     };
-    schema.pre(
-      "save",
-      function(next) {
-        if (!this[field] && this.tenantId) {
-          this[field] = this.tenantId;
-        }
-        if (!this[field]) {
-          const error = new Error(
-            `The ${field} is required to save this document.`
-          );
-          next(error);
-          return;
-        }
-        next();
+    schema.pre("save", function(next) {
+      if (!this[field] && this.tenantId) {
+        this[field] = this.tenantId;
       }
-    );
+      if (!this[field]) {
+        return next(
+          new Error(`The ${field} is required to save this document.`)
+        );
+      }
+      next();
+    });
     schema.pre("find", addTenantScope);
     schema.pre("findOne", addTenantScope);
     schema.pre("countDocuments", addTenantScope);
@@ -1226,28 +1241,24 @@ var MongoosePerformancePlugin = class {
   }
   // 2. Retry Handler Plugin
   static RetryHandler(schema, options = { retries: 3, delay: 1e3 }) {
-    return function(schema2) {
-      const { retries, delay } = options;
-      schema2.pre("save", async function(next) {
-        let attempt = 0;
-        const saveWithRetry = async () => {
-          try {
-            await this.save();
-            next();
-          } catch (err) {
-            if (attempt < retries) {
-              attempt++;
-              console.warn(
-                `Retrying save attempt #${attempt} due to error: ${err.message}`
-              );
-              setTimeout(saveWithRetry, delay);
-            } else {
-              next(err);
-            }
+    const { retries, delay } = options;
+    schema.methods.saveWithRetry = async function() {
+      let attempt = 0;
+      while (attempt <= retries) {
+        try {
+          return await this.save();
+        } catch (err) {
+          if (attempt < retries) {
+            attempt++;
+            console.warn(
+              `Retrying save attempt #${attempt} due to error: ${err.message}`
+            );
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          } else {
+            throw err;
           }
-        };
-        saveWithRetry();
-      });
+        }
+      }
     };
   }
 };
@@ -1371,7 +1382,7 @@ var MongooseSecurityPlugin = class {
           if (this.isNew || this.isModified(field)) {
             const query = { [field]: this[field] };
             if (this._id) query._id = { $ne: this._id };
-            const existingDoc = await this.constructor.findOne(query);
+            const existingDoc = await this.constructor.findOne(query).setOptions({ skipTenantCheck: true });
             if (existingDoc) {
               const errorMessage = messages[field] || `${field} already exists.`;
               const error = new Error(errorMessage);
@@ -1390,7 +1401,7 @@ var MongooseSecurityPlugin = class {
           if (update && update[field]) {
             const query = { [field]: update[field] };
             if (this._id) query._id = { $ne: this._id };
-            const existingDoc = await this.model.findOne(query);
+            const existingDoc = await this.model.findOne(query).setOptions({ skipTenantCheck: true });
             if (existingDoc) {
               const errorMessage = messages[field] || `${field} already exists.`;
               const error = new Error(errorMessage);
@@ -1453,6 +1464,242 @@ var availablePlugins = {
   fieldEncryption: MongooseSecurityPlugin.FieldEncryption,
   uniqueConstraint: MongooseSecurityPlugin.UniqueConstraint,
   schemaValidation: MongooseSecurityPlugin.SchemaValidation
+};
+
+// src/service/cache/redis/index.ts
+var import_ioredis = __toESM(require("ioredis"), 1);
+var _RedisClientService = class _RedisClientService {
+  constructor() {
+    if (_RedisClientService.instance) {
+      return _RedisClientService.instance;
+    }
+    _RedisClientService.instance = this;
+  }
+  static enableRedis(enable = true, config8) {
+    _RedisClientService.isRedisEnabled = enable;
+    if (enable) {
+      _RedisClientService.init(config8);
+    } else {
+      _RedisClientService.disconnect();
+    }
+  }
+  static init(config8) {
+    if (_RedisClientService.isRedisEnabled && !_RedisClientService.connected) {
+      _RedisClientService.redis = new import_ioredis.default({
+        host: config8.REDIS_HOST || "localhost",
+        port: Number(config8.REDIS_PORT) || 6379,
+        password: config8.REDIS_PASSWORD || void 0,
+        db: Number(config8.REDIS_DB) || 0
+      });
+      _RedisClientService.redis.on("connect", () => {
+        _RedisClientService.connected = true;
+        console.info("Connected to Redis");
+      });
+      _RedisClientService.redis.on("error", (err) => {
+        console.error("Redis connection error: ", err);
+        _RedisClientService.connected = false;
+      });
+    }
+  }
+  static async set(key, value, options) {
+    if (!_RedisClientService.isRedisEnabled) {
+      console.info("Redis is disabled. Skipping set operation.");
+      return;
+    }
+    try {
+      if (options?.expire) {
+        await _RedisClientService.redis.set(key, value, "EX", options.expire);
+      } else {
+        await _RedisClientService.redis.set(key, value);
+      }
+      console.info(`Key "${key}" set successfully.`);
+    } catch (err) {
+      console.error("Error setting key:", err);
+    }
+  }
+  static async get(key) {
+    if (!_RedisClientService.isRedisEnabled) {
+      console.info("Redis is disabled. Skipping get operation.");
+      return;
+    }
+    try {
+      const value = await _RedisClientService.redis.get(key);
+      if (value === null) {
+        console.info(`Key "${key}" not found.`);
+        return null;
+      }
+      return value;
+    } catch (err) {
+      console.error("Error getting key:", err);
+    }
+  }
+  static async del(key) {
+    if (!_RedisClientService.isRedisEnabled) {
+      console.info("Redis is disabled. Skipping delete operation.");
+      return;
+    }
+    try {
+      const result = await _RedisClientService.redis.del(key);
+      if (result === 1) {
+        console.info(`Key "${key}" deleted successfully.`);
+      } else {
+        console.info(`Key "${key}" not found.`);
+      }
+    } catch (err) {
+      console.error("Error deleting key:", err);
+    }
+  }
+  static async expire(key, seconds) {
+    if (!_RedisClientService.isRedisEnabled) {
+      console.info("Redis is disabled. Skipping expiration operation.");
+      return;
+    }
+    try {
+      await _RedisClientService.redis.expire(key, seconds);
+      console.info(`Key "${key}" will expire in ${seconds} seconds.`);
+    } catch (err) {
+      console.error("Error setting expiration:", err);
+    }
+  }
+  static async keys(pattern = "*") {
+    if (!_RedisClientService.isRedisEnabled) {
+      console.info("Redis is disabled. Skipping keys operation.");
+      return [];
+    }
+    try {
+      const keys = await _RedisClientService.redis.keys(pattern);
+      return keys;
+    } catch (err) {
+      console.error("Error retrieving keys:", err);
+    }
+  }
+  static getClient() {
+    if (!_RedisClientService.isRedisEnabled) {
+      console.info("Redis is disabled. Returning null client.");
+      return null;
+    }
+    return _RedisClientService.redis;
+  }
+  static disconnect() {
+    if (_RedisClientService.redis) {
+      _RedisClientService.redis.disconnect();
+      console.info("Disconnected from Redis");
+    }
+    _RedisClientService.connected = false;
+  }
+};
+_RedisClientService.instance = null;
+_RedisClientService.redis = null;
+_RedisClientService.connected = false;
+_RedisClientService.isRedisEnabled = false;
+var RedisClientService = _RedisClientService;
+
+// src/service/db/mongoose/connection/index.ts
+var import_mongoose4 = __toESM(require("mongoose"), 1);
+var _instance, _isConnected, _uri, _options, _Mongoose_static, connect_fn, reconnect_fn;
+var _Mongoose = class _Mongoose {
+  constructor() {
+    if (__privateGet(_Mongoose, _instance)) return __privateGet(_Mongoose, _instance);
+    __privateSet(_Mongoose, _instance, this);
+    import_mongoose4.default.connection.on("connected", () => {
+      __privateSet(_Mongoose, _isConnected, true);
+      console.info("[MongoDB] Connected");
+    });
+    import_mongoose4.default.connection.on("disconnected", () => {
+      __privateSet(_Mongoose, _isConnected, false);
+      console.info("[MongoDB] Disconnected. Retrying in 5s...");
+      setTimeout(() => {
+        var _a;
+        return __privateMethod(_a = _Mongoose, _Mongoose_static, reconnect_fn).call(_a);
+      }, 5e3);
+    });
+    import_mongoose4.default.connection.on("error", (err) => {
+      console.error("[MongoDB] Connection error:", err);
+    });
+  }
+  static async init({ uri, options = {} }) {
+    var _a;
+    if (!uri) {
+      throw new Error("[MongoDB] URI is required to connect");
+    }
+    __privateSet(_Mongoose, _uri, uri);
+    __privateSet(_Mongoose, _options, options);
+    if (!__privateGet(_Mongoose, _instance)) {
+      new _Mongoose();
+    }
+    if (!__privateGet(_Mongoose, _isConnected)) {
+      await __privateMethod(_a = _Mongoose, _Mongoose_static, connect_fn).call(_a);
+    }
+  }
+  static getMongoose() {
+    return import_mongoose4.default;
+  }
+};
+_instance = new WeakMap();
+_isConnected = new WeakMap();
+_uri = new WeakMap();
+_options = new WeakMap();
+_Mongoose_static = new WeakSet();
+connect_fn = async function() {
+  try {
+    await import_mongoose4.default.connect(__privateGet(_Mongoose, _uri), __privateGet(_Mongoose, _options));
+  } catch (err) {
+    console.error("[MongoDB] Initial connect failed. Retrying...");
+    setTimeout(() => {
+      var _a;
+      return __privateMethod(_a = _Mongoose, _Mongoose_static, reconnect_fn).call(_a);
+    }, 5e3);
+  }
+};
+reconnect_fn = async function() {
+  if (!__privateGet(_Mongoose, _isConnected) && __privateGet(_Mongoose, _uri)) {
+    try {
+      await import_mongoose4.default.connect(__privateGet(_Mongoose, _uri), __privateGet(_Mongoose, _options));
+    } catch (err) {
+      console.error("[MongoDB] Reconnect failed. Retrying...");
+      setTimeout(() => {
+        var _a;
+        return __privateMethod(_a = _Mongoose, _Mongoose_static, reconnect_fn).call(_a);
+      }, 5e3);
+    }
+  }
+};
+__privateAdd(_Mongoose, _Mongoose_static);
+__privateAdd(_Mongoose, _instance, null);
+__privateAdd(_Mongoose, _isConnected, false);
+__privateAdd(_Mongoose, _uri, "");
+__privateAdd(_Mongoose, _options, {});
+var Mongoose = _Mongoose;
+
+// src/service/db/mongoose/model/index.ts
+var import_mongoose5 = __toESM(require("mongoose"), 1);
+var ModelBuilder = class {
+  static build({
+    name,
+    schemaDefinition,
+    schemaOptions = {},
+    plugins = {}
+  }) {
+    if (!name || !schemaDefinition) {
+      throw new Error("Model name and schema definition are required.");
+    }
+    if (import_mongoose5.default.models[name]) {
+      return import_mongoose5.default.models[name];
+    }
+    const schema = new import_mongoose5.default.Schema(schemaDefinition, schemaOptions);
+    for (const pluginKey of Object.keys(plugins)) {
+      const pluginFn = availablePlugins[pluginKey];
+      const pluginValue = plugins[pluginKey];
+      if (pluginFn && typeof pluginFn === "function") {
+        if (pluginValue === true) {
+          pluginFn(schema);
+        } else {
+          pluginFn(schema, pluginValue);
+        }
+      }
+    }
+    return import_mongoose5.default.model(name, schema);
+  }
 };
 
 // src/service/message/email/node-mailer/transporter/index.ts
@@ -1598,228 +1845,603 @@ _SMSService.fromNumber = "";
 _SMSService.logger = console.log;
 var SMSService = _SMSService;
 
-// src/third-party/axios/index.ts
-var import_axios = __toESM(require("axios"), 1);
-var _AxiosHelper = class _AxiosHelper {
-  constructor(config8) {
-    if (_AxiosHelper.instance) {
-      return _AxiosHelper.instance;
-    }
-    if (!config8.baseURL) {
-      throw new Error("Base URL is required to create Axios instance");
-    }
-    this.baseURL = config8.baseURL;
-    this.timeout = config8.timeout ?? 5e3;
-    this.headers = config8.headers ?? {};
-    this.axiosInstance = import_axios.default.create({
-      baseURL: this.baseURL,
-      timeout: this.timeout,
-      headers: {
-        "Content-Type": "application/json",
-        ...this.headers
-      }
-    });
-    this.axiosInstance.interceptors.response.use(
-      this.handleResponse,
-      this.handleError
-    );
-    _AxiosHelper.instance = this;
-  }
-  static getInstance(config8) {
-    if (!_AxiosHelper.instance) {
-      _AxiosHelper.instance = new _AxiosHelper(config8);
-    }
-    return _AxiosHelper.instance;
-  }
-  handleResponse(response) {
-    return response;
-  }
-  handleError(error) {
-    if (error.response) {
-      console.error("Server error:", error.response.status);
-    } else if (error.request) {
-      console.error("No response received:", error.request);
-    } else {
-      console.error("Axios setup error:", error.message);
-    }
-    return Promise.reject(error);
-  }
-  async request(method, options) {
-    const { url, data, headers = {}, params = {}, config: config8 = {} } = options;
-    try {
-      const finalConfig = {
-        method,
-        url,
-        headers: { ...this.headers, ...headers },
-        params,
-        ...config8
-      };
-      if (["post", "put", "patch", "delete"].includes(method.toLowerCase()) && data !== void 0) {
-        finalConfig.data = data;
-      }
-      const response = await this.axiosInstance.request(finalConfig);
-      return response.data;
-    } catch (error) {
+// src/service/payment/stripe/index.ts
+var import_stripe = __toESM(require("stripe"), 1);
+var StripeService = class {
+  // Expose stripe via getter — throws if not initialized (no null checks everywhere)
+  static get stripe() {
+    if (!this._stripe)
       throw new Error(
-        `${method.toUpperCase()} request failed: ${error.message}`
+        "Stripe has not been initialized. Call StripeService.init() first."
+      );
+    return this._stripe;
+  }
+  // -----------------------
+  // ⚙️ Initialization
+  // -----------------------
+  static init(secretKey, config8) {
+    if (!secretKey)
+      throw new Error("Stripe secret key is required for initialization");
+    if (!this.stripe) {
+      this._stripe = new import_stripe.default(secretKey, config8?.stripeOptions || {});
+      this.webhookSecret = config8?.webhookSecret;
+      if (config8?.logFn) this.logFn = config8.logFn;
+      if (config8?.defaultCurrency)
+        this.defaultCurrency = config8.defaultCurrency;
+      if (config8?.defaultPaymentMethodTypes)
+        this.defaultPaymentMethodTypes = config8.defaultPaymentMethodTypes;
+      if (config8?.retry)
+        this.retryConfig = { ...this.retryConfig, ...config8.retry };
+      if (typeof config8?.debug === "boolean") this.debug = config8.debug;
+      this.log("Stripe initialized");
+    } else {
+      this.log("Stripe already initialized, skipping.");
+    }
+    if (config8?.webhookEvents)
+      this.registerWebhookEvents({ events: config8.webhookEvents });
+  }
+  // -----------------------
+  // 🔔 Webhook Handling (supports wildcards like invoice.* or *)
+  // -----------------------
+  static registerWebhookEvent(event, callback) {
+    this.webhookHandlers.push({ event, callback });
+    this.log(`Registered handler for: ${event}`);
+  }
+  static registerWebhookEvents({
+    events
+  }) {
+    this.webhookHandlers.push(...events);
+  }
+  static clearWebhookHandlers() {
+    this.webhookHandlers = [];
+    this.log("Cleared all webhook handlers");
+  }
+  static matchEventPattern(pattern, actual) {
+    if (pattern === "*") return true;
+    if (pattern.includes("*")) {
+      const escaped = pattern.split("*").map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+      const regex = new RegExp(`^${escaped}$`);
+      return regex.test(actual);
+    }
+    return pattern === actual;
+  }
+  static async handleWebhook(rawBody, sigHeader) {
+    if (!this.webhookSecret || !this.stripe) {
+      throw new Error("Stripe or Webhook secret not initialized");
+    }
+    let event;
+    try {
+      event = this.stripe.webhooks.constructEvent(
+        rawBody,
+        sigHeader,
+        this.webhookSecret
+      );
+      this.log(`Webhook verified: ${event.type}`);
+    } catch (err) {
+      this.log("Webhook signature verification failed:", err);
+      throw err;
+    }
+    const handlers = this.webhookHandlers.filter(
+      (h) => this.matchEventPattern(h.event, event.type)
+    );
+    if (handlers.length === 0) {
+      this.log(
+        `No handlers registered for ${event.type} - invoked fallback if present`
+      );
+      const fallback = this.webhookHandlers.find((h) => h.event === "*");
+      if (fallback) {
+        try {
+          await fallback.callback(event);
+        } catch (err) {
+          this.log(`Error in fallback handler for ${event.type}:`, err);
+        }
+      }
+    }
+    for (const handler of handlers) {
+      try {
+        await handler.callback(event);
+      } catch (err) {
+        this.log(`Error in handler for ${event.type}:`, err);
+      }
+    }
+    return event;
+  }
+  // -----------------------
+  // 👤 Tenant Customer (improved search + optional direct ID usage)
+  // -----------------------
+  static async createTenantCustomer(tenantId, params = {}) {
+    const merged = {
+      email: params.email,
+      metadata: { tenantId, ...params.metadata || {} },
+      ...params
+    };
+    return await this.execute(() => this.stripe.customers.create(merged));
+  }
+  static async getTenantCustomer(tenantId) {
+    try {
+      const q = `metadata['tenantId']:'${tenantId.replace(/'/g, "\\'")}'`;
+      const res = await this.execute(
+        () => this.stripe.customers.search({ query: q, limit: 1 })
+      );
+      if (res && res.data && res.data.length)
+        return res.data[0];
+    } catch (err) {
+      this.log(
+        "customers.search failed or not supported; falling back to list with pagination",
+        err
+      );
+      let startingAfter = void 0;
+      do {
+        const list = await this.execute(
+          () => this.stripe.customers.list({
+            limit: 100,
+            starting_after: startingAfter
+          })
+        );
+        const found = list.data.find(
+          (c) => c.metadata && c.metadata.tenantId === tenantId
+        );
+        if (found) return found;
+        if (!list.has_more) break;
+        startingAfter = list.data[list.data.length - 1].id;
+      } while (startingAfter);
+    }
+    return null;
+  }
+  static async updateTenantCustomer(tenantId, updateData) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) throw new Error("Customer not found");
+    return await this.execute(
+      () => this.stripe.customers.update(customer.id, updateData)
+    );
+  }
+  static async deleteTenantCustomer(tenantId) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) throw new Error("Customer not found");
+    return await this.execute(() => this.stripe.customers.del(customer.id));
+  }
+  // -----------------------
+  // 📦 Subscriptions (flexible params + idempotency)
+  // -----------------------
+  static async createTenantSubscription(tenantId, params = {}) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) throw new Error("Customer not found");
+    const { idempotencyKey, priceId, ...rest } = params;
+    const base = {
+      ...rest,
+      // spread first
+      customer: customer.id,
+      // then enforce correct customer
+      items: rest.items || (priceId ? [{ price: priceId }] : void 0),
+      metadata: rest.metadata || {}
+    };
+    const options = {};
+    if (idempotencyKey) options.idempotencyKey = idempotencyKey;
+    return await this.execute(
+      () => this.stripe.subscriptions.create(base, options)
+    );
+  }
+  static async updateTenantSubscription(subscriptionId, updateFields, idempotencyKey) {
+    return await this.execute(
+      () => this.stripe.subscriptions.update(
+        subscriptionId,
+        updateFields,
+        idempotencyKey ? { idempotencyKey } : void 0
+      )
+    );
+  }
+  static async cancelTenantSubscription(subscriptionId, options = {
+    atPeriodEnd: true
+  }) {
+    if (options.atPeriodEnd) {
+      return await this.updateTenantSubscription(subscriptionId, {
+        cancel_at_period_end: true
+      });
+    }
+    return await this.execute(
+      () => this.stripe.subscriptions.cancel(subscriptionId)
+    );
+  }
+  static async listTenantSubscriptions(tenantId) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) return [];
+    const subs = await this.execute(
+      () => this.stripe.subscriptions.list({ customer: customer.id })
+    );
+    return subs.data;
+  }
+  // -----------------------
+  // 💸 Payments / Invoices (fully param-driven)
+  // -----------------------
+  static async createOneTimeCharge(tenantId, params) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) throw new Error("Customer not found");
+    if (params.amount !== void 0)
+      params.amount = this.formatAmountToStripeCents(params.amount);
+    const toSend = {
+      customer: customer.id,
+      currency: params.currency || this.defaultCurrency,
+      payment_method_types: params.payment_method_types || this.defaultPaymentMethodTypes,
+      ...params
+    };
+    const options = {};
+    if (params.idempotencyKey)
+      options.idempotencyKey = params.idempotencyKey;
+    return await this.execute(
+      () => this.stripe.paymentIntents.create(toSend, options)
+    );
+  }
+  static async createInvoiceItem(tenantId, params) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) throw new Error("Customer not found");
+    if (params.amount !== void 0)
+      params.amount = this.formatAmountToStripeCents(params.amount);
+    const toSend = {
+      customer: customer.id,
+      currency: params.currency || this.defaultCurrency,
+      ...params
+    };
+    return await this.execute(() => this.stripe.invoiceItems.create(toSend));
+  }
+  static async createAndSendInvoice(tenantId, params = {}) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) throw new Error("Customer not found");
+    const invoice = await this.execute(
+      () => this.stripe.invoices.create({
+        customer: customer.id,
+        auto_advance: true,
+        ...params
+      })
+    );
+    if (!invoice.id) throw new Error("Invoice ID is undefined");
+    await this.execute(() => this.stripe.invoices.sendInvoice(invoice.id));
+    return invoice;
+  }
+  static async retrieveInvoices(tenantId) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) return [];
+    const invoices = await this.execute(
+      () => this.stripe.invoices.list({ customer: customer.id })
+    );
+    return invoices.data;
+  }
+  static getInvoiceUrl(invoiceId) {
+    return `https://billing.stripe.com/invoices/${invoiceId}`;
+  }
+  // -----------------------
+  // 💳 Payment Methods
+  // -----------------------
+  static async createPaymentMethod(params) {
+    return await this.execute(() => this.stripe.paymentMethods.create(params));
+  }
+  static async attachPaymentMethodToTenant(tenantId, paymentMethodId, options = { setAsDefault: true }) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) throw new Error("Customer not found");
+    const paymentMethod = await this.execute(
+      () => this.stripe.paymentMethods.attach(paymentMethodId, {
+        customer: customer.id
+      })
+    );
+    if (options.setAsDefault) {
+      await this.execute(
+        () => this.stripe.customers.update(customer.id, {
+          invoice_settings: { default_payment_method: paymentMethodId }
+        })
+      );
+    }
+    return paymentMethod;
+  }
+  static async updatePaymentMethod(paymentMethodId, data) {
+    return await this.execute(
+      () => this.stripe.paymentMethods.update(paymentMethodId, data)
+    );
+  }
+  static async detachPaymentMethod(paymentMethodId) {
+    return await this.execute(
+      () => this.stripe.paymentMethods.detach(paymentMethodId)
+    );
+  }
+  static async listPaymentMethods(tenantId, type = "card") {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) return [];
+    const paymentMethods = await this.execute(
+      () => this.stripe.paymentMethods.list({ customer: customer.id, type })
+    );
+    return paymentMethods.data;
+  }
+  // -----------------------
+  // 📥 Refunds
+  // -----------------------
+  static async refundCharge(chargeId, amount, idempotencyKey) {
+    const params = { charge: chargeId };
+    if (amount !== void 0)
+      params.amount = this.formatAmountToStripeCents(amount);
+    const options = {};
+    if (idempotencyKey) options.idempotencyKey = idempotencyKey;
+    return await this.execute(
+      () => this.stripe.refunds.create(params, options)
+    );
+  }
+  static async getRefunds(tenantId) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) return [];
+    const charges = await this.execute(
+      () => this.stripe.charges.list({ customer: customer.id })
+    );
+    return charges.data.flatMap((charge) => charge?.refunds?.data || []);
+  }
+  // -----------------------
+  // 🌐 Billing Portal
+  // -----------------------
+  static async getBillingPortalSessionUrl(tenantId, returnUrl, params) {
+    const customer = await this.getTenantCustomer(tenantId);
+    if (!customer) throw new Error("Customer not found");
+    const session2 = await this.execute(
+      () => this.stripe.billingPortal.sessions.create({
+        customer: customer.id,
+        return_url: returnUrl,
+        ...params
+      })
+    );
+    return session2.url;
+  }
+  // -----------------------
+  // ⚙️ Helpers
+  // -----------------------
+  static formatAmountToStripeCents(amount) {
+    return Math.round(amount * 100);
+  }
+  static convertStripeCentsToAmount(cents) {
+    return cents / 100;
+  }
+  static getTenantIdFromMetadata(metadata) {
+    return metadata ? metadata.tenantId || null : null;
+  }
+  static getStripeCustomerIdFromMetadata(metadata) {
+    return metadata ? metadata.stripeCustomerId || null : null;
+  }
+  static logStripeError(error) {
+    this.log("Stripe Error:", this.parseStripeError(error));
+  }
+  static parseStripeError(error) {
+    if (!error) return "Unknown Stripe error";
+    if (error.type && error.message) return `[${error.type}] ${error.message}`;
+    if (error.raw && error.raw.message) return error.raw.message;
+    return String(error);
+  }
+  static async retryWithBackoff(fn, retries = this.retryConfig.retries, delay = this.retryConfig.delayMs) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (retries <= 0) throw err;
+      if (this.debug)
+        this.log("retryWithBackoff: attempt failed, retrying", {
+          retries,
+          err
+        });
+      await new Promise((res) => setTimeout(res, delay));
+      return this.retryWithBackoff(fn, retries - 1, delay * 2);
+    }
+  }
+  static async execute(fn) {
+    try {
+      return await this.retryWithBackoff(
+        fn,
+        this.retryConfig.retries,
+        this.retryConfig.delayMs
+      );
+    } catch (err) {
+      this.logStripeError(err);
+      throw err;
+    }
+  }
+  // Convenience composite helper
+  static async createCustomerAndSubscription(tenantId, customerParams, subscriptionParams) {
+    const customer = await this.createTenantCustomer(tenantId, customerParams);
+    const sub = await this.createTenantSubscription(tenantId, {
+      ...subscriptionParams,
+      customer: customer.id
+    });
+    return { customer, subscription: sub };
+  }
+  static log(...args) {
+    try {
+      this.logFn?.(...args);
+    } catch (err) {
+      console.info(...args);
+    }
+  }
+};
+StripeService.webhookHandlers = [];
+StripeService.logFn = console.info;
+StripeService.defaultCurrency = "usd";
+StripeService.defaultPaymentMethodTypes = ["card"];
+StripeService.retryConfig = { retries: 3, delayMs: 1e3 };
+StripeService.debug = false;
+
+// src/service/queue/rabbitmq/index.ts
+var amqplib = __toESM(require("amqplib"), 1);
+var _RabbitMQService_static, connect_fn2, reconnect_fn2, setupExchanges_fn, setupQueues_fn, setupConsumer_fn, reRegisterConsumers_fn;
+var _RabbitMQService = class _RabbitMQService {
+  static async init(config8) {
+    var _a;
+    if (_RabbitMQService.isInitialized || !config8?.enabled) return;
+    console.log("I am trying to initialize the RabbitMQService");
+    _RabbitMQService.enabled = true;
+    _RabbitMQService.config = config8;
+    _RabbitMQService.isInitialized = true;
+    await __privateMethod(_a = _RabbitMQService, _RabbitMQService_static, connect_fn2).call(_a);
+  }
+  static getChannel() {
+    if (!_RabbitMQService.channel)
+      throw new Error("RabbitMQService not initialized");
+    return _RabbitMQService.channel;
+  }
+  static async publishToExchange(exchange, routingKey, message) {
+    if (!_RabbitMQService.channel)
+      throw new Error("RabbitMQService not connected");
+    const buffer = Buffer.from(JSON.stringify(message));
+    _RabbitMQService.channel.publish(exchange, routingKey, buffer, {
+      persistent: true
+    });
+  }
+  static async publishToQueue(queue, message) {
+    if (!_RabbitMQService.channel)
+      throw new Error("RabbitMQService not connected");
+    const buffer = Buffer.from(JSON.stringify(message));
+    _RabbitMQService.channel.sendToQueue(queue, buffer, { persistent: true });
+  }
+  static async consume(queue, handler, options = {}) {
+    var _a;
+    _RabbitMQService.consumers.push({ queue, handler, options });
+    if (!_RabbitMQService.channel) {
+      console.warn(
+        `[RabbitMQService] Consumer for "${queue}" registered before initialization. Will activate after connection.`
+      );
+      return;
+    }
+    await __privateMethod(_a = _RabbitMQService, _RabbitMQService_static, setupConsumer_fn).call(_a, queue, handler, options);
+  }
+};
+_RabbitMQService_static = new WeakSet();
+connect_fn2 = async function() {
+  var _a, _b, _c, _d;
+  try {
+    if (!_RabbitMQService.config) throw new Error("Config not set");
+    _RabbitMQService.connection = await amqplib.connect(
+      _RabbitMQService.config.uri
+    );
+    _RabbitMQService.connection?.on("error", (err) => {
+      var _a2;
+      console.error("[RabbitMQService] Connection error event:", err);
+      __privateMethod(_a2 = _RabbitMQService, _RabbitMQService_static, reconnect_fn2).call(_a2);
+    });
+    _RabbitMQService.connection?.on("close", () => {
+      var _a2;
+      console.warn("[RabbitMQService] Connection closed, reconnecting...");
+      __privateMethod(_a2 = _RabbitMQService, _RabbitMQService_static, reconnect_fn2).call(_a2);
+    });
+    _RabbitMQService.channel = await _RabbitMQService.connection?.createChannel();
+    if (_RabbitMQService.config.prefetch && _RabbitMQService.channel) {
+      _RabbitMQService.channel.prefetch(_RabbitMQService.config.prefetch);
+    }
+    await __privateMethod(_a = _RabbitMQService, _RabbitMQService_static, setupExchanges_fn).call(_a);
+    await __privateMethod(_b = _RabbitMQService, _RabbitMQService_static, setupQueues_fn).call(_b);
+    await __privateMethod(_c = _RabbitMQService, _RabbitMQService_static, reRegisterConsumers_fn).call(_c);
+    console.log("[RabbitMQService] Connected and configured.");
+  } catch (err) {
+    console.error("[RabbitMQService] Connection error:", err);
+    __privateMethod(_d = _RabbitMQService, _RabbitMQService_static, reconnect_fn2).call(_d);
+  }
+};
+reconnect_fn2 = async function() {
+  console.warn("[RabbitMQService] Reconnecting in 5s...");
+  setTimeout(() => {
+    var _a;
+    return __privateMethod(_a = _RabbitMQService, _RabbitMQService_static, connect_fn2).call(_a);
+  }, 5e3);
+};
+setupExchanges_fn = async function() {
+  if (!_RabbitMQService.config?.exchanges || !_RabbitMQService.channel) return;
+  for (const ex of _RabbitMQService.config.exchanges) {
+    await _RabbitMQService.channel.assertExchange(
+      ex.name,
+      ex.type,
+      ex.options || {}
+    );
+  }
+};
+setupQueues_fn = async function() {
+  if (!_RabbitMQService.config?.queues || !_RabbitMQService.channel) return;
+  for (const q of _RabbitMQService.config.queues) {
+    const options = q.options || {};
+    if (q.deadLetter) {
+      await _RabbitMQService.channel.assertExchange(
+        `${q.name}.dlx`,
+        "fanout",
+        { durable: true }
+      );
+      await _RabbitMQService.channel.assertQueue(`${q.name}.dlq`, {
+        durable: true
+      });
+      await _RabbitMQService.channel.bindQueue(
+        `${q.name}.dlq`,
+        `${q.name}.dlx`,
+        ""
+      );
+      options.deadLetterExchange = `${q.name}.dlx`;
+    }
+    await _RabbitMQService.channel.assertQueue(q.name, options);
+    if (q.bindTo) {
+      await _RabbitMQService.channel.bindQueue(
+        q.name,
+        q.bindTo.exchange,
+        q.bindTo.routingKey || ""
       );
     }
   }
-  async get(options) {
-    return this.request("get", options);
-  }
-  async post(options) {
-    return this.request("post", options);
-  }
-  async put(options) {
-    return this.request("put", options);
-  }
-  async patch(options) {
-    return this.request("patch", options);
-  }
-  async delete(options) {
-    return this.request("delete", options);
+};
+setupConsumer_fn = async function(queue, handler, options = {}) {
+  const retryLimit = options.retryAttempts ?? 3;
+  const retryDelay = options.retryDelayMs ?? 1e3;
+  const channel = _RabbitMQService.getChannel();
+  await channel.consume(queue, async (msg) => {
+    if (!msg) return;
+    const content = JSON.parse(msg.content.toString());
+    let attempts = 0;
+    const attempt = async () => {
+      try {
+        await handler(content);
+        channel.ack(msg);
+      } catch (err) {
+        attempts++;
+        if (attempts <= retryLimit) {
+          console.warn(
+            `[RabbitMQService] Retry attempt ${attempts} for queue "${queue}"`
+          );
+          setTimeout(attempt, retryDelay);
+        } else {
+          console.error(
+            `[RabbitMQService] Failed after ${retryLimit} attempts for queue "${queue}"`,
+            err
+          );
+          channel.nack(msg, false, false);
+        }
+      }
+    };
+    attempt();
+  });
+};
+reRegisterConsumers_fn = async function() {
+  var _a;
+  if (!_RabbitMQService.consumers.length) return;
+  console.log("[RabbitMQService] Re-registering consumers...");
+  for (const { queue, handler, options } of _RabbitMQService.consumers) {
+    try {
+      await __privateMethod(_a = _RabbitMQService, _RabbitMQService_static, setupConsumer_fn).call(_a, queue, handler, options);
+    } catch (err) {
+      console.error(
+        `[RabbitMQService] Error re-registering consumer for queue "${queue}"`,
+        err
+      );
+    }
   }
 };
-_AxiosHelper.instance = null;
-var AxiosHelper = _AxiosHelper;
+__privateAdd(_RabbitMQService, _RabbitMQService_static);
+_RabbitMQService.enabled = false;
+_RabbitMQService.config = null;
+_RabbitMQService.connection = null;
+_RabbitMQService.channel = null;
+_RabbitMQService.isInitialized = false;
+_RabbitMQService.consumers = [];
+var RabbitMQService = _RabbitMQService;
 
 // src/service/scheduler/cron/index.ts
 var import_node_cron = require("node-cron");
 var import_redlock = __toESM(require("redlock"), 1);
-var import_axios2 = __toESM(require("axios"), 1);
+var import_axios = __toESM(require("axios"), 1);
 var import_date_fns = require("date-fns");
 var import_crypto = require("crypto");
-
-// src/service/cache/redis/index.ts
-var import_ioredis = __toESM(require("ioredis"), 1);
-var _RedisClientService = class _RedisClientService {
-  constructor() {
-    if (_RedisClientService.instance) {
-      return _RedisClientService.instance;
-    }
-    _RedisClientService.instance = this;
-  }
-  static enableRedis(enable = true, config8) {
-    _RedisClientService.isRedisEnabled = enable;
-    if (enable) {
-      _RedisClientService.init(config8);
-    } else {
-      _RedisClientService.disconnect();
-    }
-  }
-  static init(config8) {
-    if (_RedisClientService.isRedisEnabled && !_RedisClientService.connected) {
-      _RedisClientService.redis = new import_ioredis.default({
-        host: config8.REDIS_HOST || "localhost",
-        port: Number(config8.REDIS_PORT) || 6379,
-        password: config8.REDIS_PASSWORD || void 0,
-        db: Number(config8.REDIS_DB) || 0
-      });
-      _RedisClientService.redis.on("connect", () => {
-        _RedisClientService.connected = true;
-        console.log("Connected to Redis");
-      });
-      _RedisClientService.redis.on("error", (err) => {
-        console.error("Redis connection error: ", err);
-        _RedisClientService.connected = false;
-      });
-    }
-  }
-  static async set(key, value, options) {
-    if (!_RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Skipping set operation.");
-      return;
-    }
-    try {
-      if (options?.expire) {
-        await _RedisClientService.redis.set(key, value, "EX", options.expire);
-      } else {
-        await _RedisClientService.redis.set(key, value);
-      }
-      console.log(`Key "${key}" set successfully.`);
-    } catch (err) {
-      console.error("Error setting key:", err);
-    }
-  }
-  static async get(key) {
-    if (!_RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Skipping get operation.");
-      return;
-    }
-    try {
-      const value = await _RedisClientService.redis.get(key);
-      if (value === null) {
-        console.log(`Key "${key}" not found.`);
-        return null;
-      }
-      return value;
-    } catch (err) {
-      console.error("Error getting key:", err);
-    }
-  }
-  static async del(key) {
-    if (!_RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Skipping delete operation.");
-      return;
-    }
-    try {
-      const result = await _RedisClientService.redis.del(key);
-      if (result === 1) {
-        console.log(`Key "${key}" deleted successfully.`);
-      } else {
-        console.log(`Key "${key}" not found.`);
-      }
-    } catch (err) {
-      console.error("Error deleting key:", err);
-    }
-  }
-  static async expire(key, seconds) {
-    if (!_RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Skipping expiration operation.");
-      return;
-    }
-    try {
-      await _RedisClientService.redis.expire(key, seconds);
-      console.log(`Key "${key}" will expire in ${seconds} seconds.`);
-    } catch (err) {
-      console.error("Error setting expiration:", err);
-    }
-  }
-  static async keys(pattern = "*") {
-    if (!_RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Skipping keys operation.");
-      return [];
-    }
-    try {
-      const keys = await _RedisClientService.redis.keys(pattern);
-      return keys;
-    } catch (err) {
-      console.error("Error retrieving keys:", err);
-    }
-  }
-  static getClient() {
-    if (!_RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Returning null client.");
-      return null;
-    }
-    return _RedisClientService.redis;
-  }
-  static disconnect() {
-    if (_RedisClientService.redis) {
-      _RedisClientService.redis.disconnect();
-      console.log("Disconnected from Redis");
-    }
-    _RedisClientService.connected = false;
-  }
-};
-_RedisClientService.instance = null;
-_RedisClientService.redis = null;
-_RedisClientService.connected = false;
-_RedisClientService.isRedisEnabled = false;
-var RedisClientService = _RedisClientService;
-
-// src/service/scheduler/cron/index.ts
 var CronManager = class {
   constructor({
     serviceName,
@@ -1878,17 +2500,12 @@ var CronManager = class {
       );
       return jobState ? JSON.parse(jobState) : null;
     } else if (this.persistent && this.persistService === "mongodb") {
-      return await this.db.collection(`cron_${this.serviceName}_jobStates`).findOne({ jobName });
+      return await this.db.collection(`cron_${this.serviceName}_jobStates`).findOne({ jobName }).setOptions({ skipTenantCheck: true });
     }
     return null;
   }
   async saveJobDefinition(name, cronExpression, apiConfig, options = {}) {
-    const jobData = {
-      name,
-      cronExpression,
-      apiConfig,
-      options
-    };
+    const jobData = { name, cronExpression, apiConfig, options };
     if (this.persistent && this.persistService === "redis") {
       await this.redis.hset(
         `cron:${this.serviceName}:jobDefs`,
@@ -1941,6 +2558,10 @@ var CronManager = class {
       state: "pending"
     };
     const executeTask = async () => {
+      if (job.state === "paused") {
+        this.logger.info(`Job "${name}" skipped because it is paused.`);
+        return;
+      }
       const lockKey = `locks:${this.serviceName}:${name}`;
       let lock;
       try {
@@ -1951,7 +2572,7 @@ var CronManager = class {
         while (attempts <= retry) {
           try {
             await this.trackJobState(name, "running");
-            const response = await (0, import_axios2.default)({
+            const response = await (0, import_axios.default)({
               method: apiConfig.method,
               url: apiConfig.url,
               headers: apiConfig.headers || {},
@@ -1996,48 +2617,32 @@ var CronManager = class {
     job.scheduledTask = scheduledTask;
     this.jobs.set(name, job);
     this.saveJobDefinition(name, cronExpression, apiConfig, options);
-    if (runOnInit) {
-      executeTask();
-    }
+    if (runOnInit) executeTask();
     this.logger.info(
       `Job "${name}" registered to call "${apiConfig.url}" on schedule "${cronExpression}".`
     );
   }
   pauseJob(name) {
     const job = this.jobs.get(name);
-    if (job && job.scheduledTask?.running) {
-      job.scheduledTask.stop();
-      job.state = "paused";
-      this.trackJobState(name, "paused");
-      this.logger.info(`Job "${name}" paused.`);
-    }
+    if (!job) return;
+    job.state = "paused";
+    this.trackJobState(name, "paused");
+    this.logger.info(`Job "${name}" paused.`);
   }
   resumeJob(name) {
     const job = this.jobs.get(name);
-    if (job && job.scheduledTask && !job.scheduledTask?.running && job.state === "paused") {
-      job.scheduledTask.start();
-      job.state = "running";
-      this.trackJobState(name, "running");
-      this.logger.info(`Job "${name}" resumed.`);
-    }
-  }
-  startJob(name) {
-    const job = this.jobs.get(name);
-    if (job && job.scheduledTask && !job.scheduledTask?.running) {
-      job.scheduledTask.start();
-      job.state = "running";
-      this.trackJobState(name, "running");
-      this.logger.info(`Job "${name}" started.`);
-    }
+    if (!job) return;
+    job.state = "running";
+    this.trackJobState(name, "running");
+    this.logger.info(`Job "${name}" resumed.`);
   }
   stopJob(name) {
     const job = this.jobs.get(name);
-    if (job && job.scheduledTask?.running) {
-      job.scheduledTask.stop();
-      job.state = "stopped";
-      this.trackJobState(name, "stopped");
-      this.logger.info(`Job "${name}" stopped.`);
-    }
+    if (!job || !job.scheduledTask?.running) return;
+    job.scheduledTask.stop();
+    job.state = "stopped";
+    this.trackJobState(name, "stopped");
+    this.logger.info(`Job "${name}" stopped.`);
   }
   async removeJob(name) {
     const job = this.jobs.get(name);
@@ -2115,6 +2720,95 @@ var _S3Service = class _S3Service {
 };
 _S3Service.s3 = null;
 var S3Service = _S3Service;
+
+// src/third-party/axios/index.ts
+var import_axios2 = __toESM(require("axios"), 1);
+var _AxiosHelper = class _AxiosHelper {
+  constructor(config8) {
+    if (_AxiosHelper.instance) {
+      return _AxiosHelper.instance;
+    }
+    if (!config8.baseURL) {
+      throw new Error("Base URL is required to create Axios instance");
+    }
+    this.baseURL = config8.baseURL;
+    this.timeout = config8.timeout ?? 5e3;
+    this.headers = config8.headers ?? {};
+    this.axiosInstance = import_axios2.default.create({
+      baseURL: this.baseURL,
+      timeout: this.timeout,
+      headers: {
+        "Content-Type": "application/json",
+        ...this.headers
+      }
+    });
+    this.axiosInstance.interceptors.response.use(
+      this.handleResponse,
+      this.handleError
+    );
+    _AxiosHelper.instance = this;
+  }
+  static getInstance(config8) {
+    if (!_AxiosHelper.instance) {
+      _AxiosHelper.instance = new _AxiosHelper(config8);
+    }
+    return _AxiosHelper.instance;
+  }
+  handleResponse(response) {
+    return response;
+  }
+  handleError(error) {
+    if (error.response) {
+      console.error("Server error:", error.response.status);
+    } else if (error.request) {
+      console.error("No response received:", error.request);
+    } else {
+      console.error("Axios setup error:", error.message);
+    }
+    return Promise.reject(error);
+  }
+  async request(method, options) {
+    const { url, data, headers = {}, params = {}, config: config8 = {} } = options;
+    try {
+      const finalConfig = {
+        method,
+        url,
+        headers: { ...this.headers, ...headers },
+        params,
+        ...config8
+      };
+      if (["post", "put", "patch", "delete"].includes(method.toLowerCase()) && data !== void 0) {
+        finalConfig.data = data;
+      }
+      const response = await this.axiosInstance.request(finalConfig);
+      return response.data;
+    } catch (error) {
+      throw new Error(
+        `${method.toUpperCase()} request failed: ${error.message}`
+      );
+    }
+  }
+  async get(options) {
+    return this.request("get", options);
+  }
+  async post(options) {
+    return this.request("post", options);
+  }
+  async put(options) {
+    return this.request("put", options);
+  }
+  async patch(options) {
+    return this.request("patch", options);
+  }
+  async delete(options) {
+    return this.request("delete", options);
+  }
+};
+_AxiosHelper.instance = null;
+var AxiosHelper = _AxiosHelper;
+
+// src/third-party/zod/index.ts
+var z2 = __toESM(require("zod"), 1);
 
 // src/util/date/business/index.ts
 var import_date_fns2 = require("date-fns");
@@ -2953,7 +3647,7 @@ ResponseUtil.send = (req, res, code, data = {}) => {
   const body = {
     success: config8?.success,
     code: config8?.code,
-    ...data,
+    ...Object?.keys(data)?.length ? { data } : {},
     ...message && { message },
     ...req.requestId && { requestId: req.requestId }
   };
@@ -3080,23 +3774,29 @@ var EncryptionUtil = class {
   JWTUtil,
   LodashHelper,
   LoggerHandler,
+  ModelBuilder,
+  Mongoose,
   MongooseCorePlugin,
   MongoosePerformancePlugin,
   MongoosePopulatePlugin,
   MongooseSecurityPlugin,
   NodeMailerService,
   PassportService,
+  RabbitMQService,
   RateLimitHandler,
+  RedisClientService,
   RequestTracer,
   RequestValidator,
   ResponseUtil,
   S3Service,
   SMSService,
   SecurityHandler,
+  StripeService,
   TokenBlacklistedError,
   TokenExpiredError,
   TokenInvalidError,
   availablePlugins,
   i18n,
-  logger
+  logger,
+  z
 });

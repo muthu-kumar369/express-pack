@@ -11,6 +11,7 @@ export interface AuthenticateUserOptions {
   secret?: string;
   headerKey?: string;
   usingBearer?: boolean;
+  callback?: any;
 }
 
 export interface AuthorizeRoleOptions {

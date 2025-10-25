@@ -9,13 +9,19 @@ import { Logger } from 'winston';
 import { rateLimit } from 'express-rate-limit';
 import { HelmetOptions } from 'helmet';
 import { ZodSchema } from 'zod';
-import { Document, Model, Schema, IndexOptions } from 'mongoose';
+import * as zod from 'zod';
+export { zod as z };
+export { ZodArray, ZodBoolean, ZodDefault, ZodEffects, ZodEnum, ZodLiteral, ZodNullable, ZodNumber, ZodObject, ZodOptional, ZodSchema, ZodString, ZodType, ZodTypeAny, ZodUnion } from 'zod';
+import mongoose, { Document, Model, ConnectOptions, IndexOptions, Schema } from 'mongoose';
 import Redis from 'ioredis';
 import { Db } from 'mongodb';
 import { ScheduledTask } from 'node-cron';
-import { Method } from 'axios';
+import Stripe from 'stripe';
+import * as amqplib from 'amqplib';
+import { Options as Options$1, Channel } from 'amqplib';
 import Redlock from 'redlock';
 import { PutObjectCommandInput, PutObjectCommandOutput, DeleteObjectCommandOutput } from '@aws-sdk/client-s3';
+import { Method } from 'axios';
 import { DebouncedFunc } from 'lodash-es';
 
 interface TokenPayload {
@@ -96,6 +102,7 @@ interface AuthenticateUserOptions {
     secret?: string;
     headerKey?: string;
     usingBearer?: boolean;
+    callback?: any;
 }
 interface AuthorizeRoleOptions {
     allowedRoles?: string[];
@@ -111,9 +118,9 @@ interface AuthenticatedRequest extends Request {
 }
 
 declare class AuthMiddleware {
-    static authenticateJWT({ userAuth, roleAuth, scopeAuth, }: AuthMiddlewareOptions): ((req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>) | ((req: Request, res: Response, next: NextFunction) => void);
+    static authenticateJWT({ userAuth, roleAuth, scopeAuth, }: AuthMiddlewareOptions): ((req: AuthenticatedRequest, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>) | ((req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>) | ((req: Request, res: Response, next: NextFunction) => void);
     static authenticatePassport(strategy: string, options?: any, callback?: (...args: any[]) => any): any;
-    static authenticateUser({ secret, headerKey, usingBearer, }: AuthenticateUserOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+    static authenticateUser(options: AuthenticateUserOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>;
     static authorizeRole({ allowedRoles, checkAll, }: AuthorizeRoleOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
     static authorizeScope({ requiredScopes, checkAll, }: AuthorizeScopeOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>;
     static extractToken({ req, headerKey, usingBearer, }: {
@@ -307,17 +314,9 @@ interface PaginationModel<T extends Document> extends Model<T> {
     paginate(opts?: PaginationOptions): Promise<PaginationResult<T>>;
 }
 
-declare class MongooseCorePlugin {
-    static Timestamps(schema: Schema<any>): void;
-    static SoftDelete(schema: Schema<any>, option: {}): void;
-    static SlugGenerator(schema: Schema<any>, options?: {
-        sourceField?: string;
-        slugField?: string;
-        unique?: boolean;
-    }): void;
-    static Versioning(schema: Schema<any>): void;
-    static MultiTenancy(schema: Schema<any>, options?: MultiTenancyOptions): void;
-    static Pagination(schema: Schema<any, PaginationModel<any>>): void;
+interface MongooseConfig {
+    uri: string;
+    options?: ConnectOptions;
 }
 
 interface IndexDefinition {
@@ -335,11 +334,6 @@ interface RetryHandlerOptions {
 }
 type SchemaPlugin = (schema: Schema) => void;
 
-declare class MongoosePerformancePlugin {
-    static IndexManager(schema: Schema<any>, options?: IndexManagerOptions): SchemaPlugin;
-    static RetryHandler(schema: Schema<any>, options?: RetryHandlerOptions): SchemaPlugin;
-}
-
 interface AutoPopulateOptions {
     paths: string[];
 }
@@ -355,11 +349,6 @@ interface SmartPopulationOptions {
     fields: SmartPopulationFields;
 }
 
-declare class MongoosePopulatePlugin {
-    static AutoPopulate(schema: Schema<any>, options?: AutoPopulateOptions): (schema: Schema) => void;
-    static SmartPopulation(schema: Schema<any>, options?: SmartPopulationOptions): (schema: Schema) => void;
-}
-
 interface FieldEncryptionOptions {
     fields: string[];
 }
@@ -373,6 +362,58 @@ interface SchemaValidationOptions {
     validate: {
         [field: string]: ZodSchema<any>;
     };
+}
+
+interface ISlugGenerator {
+    sourceField?: string;
+    slugField?: string;
+    unique?: boolean;
+}
+type PluginOptionsMap = {
+    timestamps: boolean;
+    softDelete: boolean;
+    slugGenerator: ISlugGenerator;
+    versioning: boolean;
+    multiTenancy: MultiTenancyOptions;
+    pagination: boolean;
+    indexManager: IndexManagerOptions;
+    retryHandler: RetryHandlerOptions;
+    autoPopulate: AutoPopulateOptions;
+    smartPopulate: SmartPopulationOptions;
+    sanitize: boolean;
+    fieldEncryption: FieldEncryptionOptions;
+    uniqueConstraint: UniqueConstraintOptions;
+    schemaValidation: SchemaValidationOptions;
+};
+type PluginKey = keyof PluginOptionsMap;
+type PluginsConfig = {
+    [K in PluginKey]?: PluginOptionsMap[K];
+};
+interface BuildModelParams {
+    name: string;
+    schemaDefinition: mongoose.SchemaDefinition;
+    schemaOptions?: mongoose.SchemaOptions;
+    plugins?: PluginsConfig;
+}
+type MongooseModel = mongoose.Model<any>;
+
+declare class MongooseCorePlugin {
+    static Timestamps(schema: Schema<any>): void;
+    static SoftDelete(schema: Schema<any>): void;
+    static SlugGenerator(schema: Schema<any>, options?: ISlugGenerator): void;
+    static Versioning(schema: Schema<any>): void;
+    static MultiTenancy(schema: Schema<any>, options?: MultiTenancyOptions): void;
+    static Pagination(schema: Schema<any, PaginationModel<any>>): void;
+}
+
+declare class MongoosePerformancePlugin {
+    static IndexManager(schema: Schema<any>, options?: IndexManagerOptions): SchemaPlugin;
+    static RetryHandler(schema: Schema<any>, options?: RetryHandlerOptions): void;
+}
+
+declare class MongoosePopulatePlugin {
+    static AutoPopulate(schema: Schema<any>, options?: AutoPopulateOptions): (schema: Schema) => void;
+    static SmartPopulation(schema: Schema<any>, options?: SmartPopulationOptions): (schema: Schema) => void;
 }
 
 declare class MongooseSecurityPlugin {
@@ -474,6 +515,49 @@ interface Transporter {
     }) => Promise<any>;
 }
 
+interface RabbitMQConfig {
+    enabled: boolean;
+    uri: string;
+    prefetch?: number;
+    exchanges?: ExchangeConfig[];
+    queues?: QueueConfig[];
+}
+interface ExchangeConfig {
+    name: string;
+    type: string;
+    options?: Options$1.AssertExchange;
+}
+interface QueueConfig {
+    name: string;
+    options?: Options$1.AssertQueue;
+    deadLetter?: boolean;
+    bindTo?: {
+        exchange: string;
+        routingKey?: string;
+    };
+}
+interface ConsumerOptions {
+    retryAttempts?: number;
+    retryDelayMs?: number;
+}
+type MessageHandler<T = any> = (msg: T) => Promise<void>;
+interface Consumer<T = any> {
+    queue: string;
+    handler: MessageHandler<T>;
+    options?: ConsumerOptions;
+}
+
+interface RedisSetOptions {
+    expire?: number;
+}
+interface RedisClientOptions {
+    REDIS_HOST?: string;
+    REDIS_PORT?: number;
+    REDIS_PASSWORD?: string;
+    REDIS_DB?: number;
+}
+type RedisInstance = Redis | null;
+
 interface S3Config {
     region?: string;
     accessKeyId?: string;
@@ -489,6 +573,34 @@ interface PresignedUrlParams {
 interface DeleteFileParams {
     Bucket: string;
     Key: string;
+}
+
+declare class RedisClientService {
+    static instance: RedisClientService | null;
+    static redis: RedisInstance;
+    static connected: boolean;
+    static isRedisEnabled: boolean;
+    constructor();
+    static enableRedis(enable: boolean | undefined, config: RedisClientOptions): void;
+    static init(config: RedisClientOptions): void;
+    static set(key: string, value: string, options?: RedisSetOptions): Promise<void>;
+    static get(key: string): Promise<string | null | undefined>;
+    static del(key: string): Promise<void>;
+    static expire(key: string, seconds: number): Promise<void>;
+    static keys(pattern?: string): Promise<string[] | undefined>;
+    static getClient(): RedisInstance;
+    static disconnect(): void;
+}
+
+declare class Mongoose {
+    #private;
+    private constructor();
+    static init({ uri, options }: MongooseConfig): Promise<void>;
+    static getMongoose(): typeof mongoose;
+}
+
+declare class ModelBuilder {
+    static build({ name, schemaDefinition, schemaOptions, plugins, }: BuildModelParams): MongooseModel;
 }
 
 declare class NodeMailerService {
@@ -528,22 +640,110 @@ declare class SMSService {
     private static renderTemplate;
 }
 
-declare class AxiosHelper {
-    private static instance;
-    private axiosInstance;
-    private baseURL;
-    private timeout;
-    private headers;
-    private constructor();
-    static getInstance(config: AxiosHelperConfig): AxiosHelper;
-    private handleResponse;
-    private handleError;
-    request(method: Method, options: AxiosRequestOptions): Promise<any>;
-    get(options: Omit<AxiosRequestOptions, "data">): Promise<any>;
-    post(options: AxiosRequestOptions): Promise<any>;
-    put(options: AxiosRequestOptions): Promise<any>;
-    patch(options: AxiosRequestOptions): Promise<any>;
-    delete(options: AxiosRequestOptions): Promise<any>;
+type InitializeConfig = {
+    webhookSecret?: string;
+    logFn?: (...args: any[]) => void;
+    defaultCurrency?: string;
+    defaultPaymentMethodTypes?: string[];
+    retry?: {
+        retries?: number;
+        delayMs?: number;
+    };
+    stripeOptions?: Stripe.StripeConfig;
+    webhookEvents?: WebhookEventHandler[];
+    debug?: boolean;
+};
+type WebhookCallback = (event: Stripe.Event) => Promise<void> | void;
+type WebhookEventHandler = {
+    event: string;
+    callback: WebhookCallback;
+};
+declare class StripeService {
+    private static _stripe;
+    static webhookSecret?: string;
+    static webhookHandlers: WebhookEventHandler[];
+    static logFn: (...args: any[]) => void;
+    static defaultCurrency: string;
+    static defaultPaymentMethodTypes: string[];
+    static retryConfig: {
+        retries: number;
+        delayMs: number;
+    };
+    static debug: boolean;
+    static get stripe(): Stripe;
+    static init(secretKey: string, config?: InitializeConfig): void;
+    static registerWebhookEvent(event: string, callback: WebhookCallback): void;
+    static registerWebhookEvents({ events, }: {
+        events: WebhookEventHandler[];
+    }): void;
+    static clearWebhookHandlers(): void;
+    static matchEventPattern(pattern: string, actual: string): boolean;
+    static handleWebhook(rawBody: Buffer, sigHeader: string): Promise<Stripe.Event>;
+    static createTenantCustomer(tenantId: string, params?: Partial<Stripe.CustomerCreateParams>): Promise<Stripe.Customer>;
+    static getTenantCustomer(tenantId: string): Promise<Stripe.Customer | null>;
+    static updateTenantCustomer(tenantId: string, updateData: Stripe.CustomerUpdateParams): Promise<Stripe.Customer>;
+    static deleteTenantCustomer(tenantId: string): Promise<Stripe.DeletedCustomer>;
+    static createTenantSubscription(tenantId: string, params?: Partial<Stripe.SubscriptionCreateParams> & {
+        idempotencyKey?: string;
+        priceId?: string;
+    }): Promise<Stripe.Subscription>;
+    static updateTenantSubscription(subscriptionId: string, updateFields: Stripe.SubscriptionUpdateParams, idempotencyKey?: string): Promise<Stripe.Subscription>;
+    static cancelTenantSubscription(subscriptionId: string, options?: {
+        atPeriodEnd?: boolean;
+        invoiceNow?: boolean;
+    }): Promise<Stripe.Subscription>;
+    static listTenantSubscriptions(tenantId: string): Promise<Stripe.Subscription[]>;
+    static createOneTimeCharge(tenantId: string, params: Partial<Stripe.PaymentIntentCreateParams> & {
+        amount?: number;
+        idempotencyKey?: string;
+    }): Promise<Stripe.PaymentIntent>;
+    static createInvoiceItem(tenantId: string, params: Partial<Stripe.InvoiceItemCreateParams> & {
+        amount?: number;
+        currency?: string;
+    }): Promise<Stripe.InvoiceItem>;
+    static createAndSendInvoice(tenantId: string, params?: Partial<Stripe.InvoiceCreateParams>): Promise<Stripe.Invoice>;
+    static retrieveInvoices(tenantId: string): Promise<Stripe.Invoice[]>;
+    static getInvoiceUrl(invoiceId: string): string;
+    static createPaymentMethod(params: Stripe.PaymentMethodCreateParams): Promise<Stripe.PaymentMethod>;
+    static attachPaymentMethodToTenant(tenantId: string, paymentMethodId: string, options?: {
+        setAsDefault?: boolean;
+    }): Promise<Stripe.PaymentMethod>;
+    static updatePaymentMethod(paymentMethodId: string, data: Stripe.PaymentMethodUpdateParams): Promise<Stripe.PaymentMethod>;
+    static detachPaymentMethod(paymentMethodId: string): Promise<Stripe.PaymentMethod>;
+    static listPaymentMethods(tenantId: string, type?: string): Promise<Stripe.PaymentMethod[]>;
+    static refundCharge(chargeId: string, amount?: number, idempotencyKey?: string): Promise<Stripe.Refund>;
+    static getRefunds(tenantId: string): Promise<Stripe.Refund[]>;
+    static getBillingPortalSessionUrl(tenantId: string, returnUrl: string, params?: Partial<Stripe.BillingPortal.SessionCreateParams>): Promise<string>;
+    static formatAmountToStripeCents(amount: number): number;
+    static convertStripeCentsToAmount(cents: number): number;
+    static getTenantIdFromMetadata(metadata: object | undefined): string | null;
+    static getStripeCustomerIdFromMetadata(metadata: object | undefined): string | null;
+    static logStripeError(error: any): void;
+    static parseStripeError(error: any): string;
+    static retryWithBackoff<T>(fn: () => Promise<T>, retries?: number, delay?: number): Promise<T>;
+    private static execute;
+    static createCustomerAndSubscription(tenantId: string, customerParams: Partial<Stripe.CustomerCreateParams>, subscriptionParams: Partial<Stripe.SubscriptionCreateParams> & {
+        idempotencyKey?: string;
+    }): Promise<{
+        customer: Stripe.Customer;
+        subscription: Stripe.Subscription;
+    }>;
+    static log(...args: any[]): void;
+}
+
+declare class RabbitMQService {
+    #private;
+    static enabled: boolean;
+    static config: RabbitMQConfig | null;
+    static connection: amqplib.ChannelModel | null;
+    static channel: Channel | null;
+    static isInitialized: boolean;
+    static consumers: Consumer[];
+    static init(config: RabbitMQConfig): Promise<void>;
+    static getChannel(): Channel;
+    static publishToExchange(exchange: string, routingKey: string, message: any): Promise<void>;
+    static publishToQueue(queue: string, message: any): Promise<void>;
+    static consume(queue: string, handler: MessageHandler, options?: ConsumerOptions): Promise<void>;
 }
 
 declare class CronManager {
@@ -567,7 +767,6 @@ declare class CronManager {
     registerJob(name: string, cronExpression: string, apiConfig: CronApiConfig, options?: JobOptions): void;
     pauseJob(name: string): void;
     resumeJob(name: string): void;
-    startJob(name: string): void;
     stopJob(name: string): void;
     removeJob(name: string): Promise<void>;
     listJobs(): string[];
@@ -579,6 +778,24 @@ declare class S3Service {
     static uploadFile(params: UploadFileParams): Promise<PutObjectCommandOutput>;
     static getPresignedUrl(params: PresignedUrlParams): Promise<string>;
     static deleteFile(params: DeleteFileParams): Promise<DeleteObjectCommandOutput>;
+}
+
+declare class AxiosHelper {
+    private static instance;
+    private axiosInstance;
+    private baseURL;
+    private timeout;
+    private headers;
+    private constructor();
+    static getInstance(config: AxiosHelperConfig): AxiosHelper;
+    private handleResponse;
+    private handleError;
+    request(method: Method, options: AxiosRequestOptions): Promise<any>;
+    get(options: Omit<AxiosRequestOptions, "data">): Promise<any>;
+    post(options: AxiosRequestOptions): Promise<any>;
+    put(options: AxiosRequestOptions): Promise<any>;
+    patch(options: AxiosRequestOptions): Promise<any>;
+    delete(options: AxiosRequestOptions): Promise<any>;
 }
 
 type HolidayList = Date[];
@@ -773,4 +990,4 @@ declare class EncryptionUtil {
     static decrypt({ encryptedText, key, }: DecryptParams): string;
 }
 
-export { AsyncRouteWrapper, AuthMiddleware, AxiosHelper, BodyParser, CompressionHandler, Cors, CronManager, DateUtilBusiness, DateUtilCompare, DateUtilCreate, DateUtilDuration, DateUtilEdgeCase, DateUtilFormat, DateUtilManipulate, DateUtilTimezone, DateUtilValidate, DateUtilsRange, DotEnv, EncryptionUtil, ErrorHandler, ExpressPack, JWTUtil, LodashHelper, LoggerHandler, MongooseCorePlugin, MongoosePerformancePlugin, MongoosePopulatePlugin, MongooseSecurityPlugin, NodeMailerService, PassportService, RateLimitHandler, RequestTracer, RequestValidator, ResponseUtil, S3Service, SMSService, SecurityHandler, TokenBlacklistedError, TokenExpiredError, TokenInvalidError, availablePlugins, i18n, logger };
+export { AsyncRouteWrapper, AuthMiddleware, AxiosHelper, BodyParser, CompressionHandler, Cors, CronManager, DateUtilBusiness, DateUtilCompare, DateUtilCreate, DateUtilDuration, DateUtilEdgeCase, DateUtilFormat, DateUtilManipulate, DateUtilTimezone, DateUtilValidate, DateUtilsRange, DotEnv, EncryptionUtil, ErrorHandler, ExpressPack, type InitializeConfig, JWTUtil, LodashHelper, LoggerHandler, ModelBuilder, Mongoose, MongooseCorePlugin, MongoosePerformancePlugin, MongoosePopulatePlugin, MongooseSecurityPlugin, NodeMailerService, PassportService, RabbitMQService, RateLimitHandler, RedisClientService, RequestTracer, RequestValidator, ResponseUtil, S3Service, SMSService, SecurityHandler, StripeService, TokenBlacklistedError, TokenExpiredError, TokenInvalidError, type WebhookCallback, type WebhookEventHandler, availablePlugins, i18n, logger };

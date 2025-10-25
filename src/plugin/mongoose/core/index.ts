@@ -14,6 +14,7 @@ import {
   SoftDeleteDocument,
   SlugDocument,
 } from "../../types/mongoose/core.types";
+import { ISlugGenerator } from "@/service/db/types/mongoose";
 
 export class MongooseCorePlugin {
   static Timestamps(schema: Schema<any>) {
@@ -40,7 +41,7 @@ export class MongooseCorePlugin {
     );
   }
 
-  static SoftDelete(schema: Schema<any>, option: {}) {
+  static SoftDelete(schema: Schema<any>) {
     schema.add({
       isDeleted: { type: Boolean, default: false },
       deletedAt: { type: Date, default: null },
@@ -84,10 +85,7 @@ export class MongooseCorePlugin {
     schema.pre("countDocuments", excludeDeleted);
   }
 
-  static SlugGenerator(
-    schema: Schema<any>,
-    options: { sourceField?: string; slugField?: string; unique?: boolean } = {}
-  ) {
+  static SlugGenerator(schema: Schema<any>, options: ISlugGenerator = {}) {
     const { sourceField = "name", slugField = "slug", unique = true } = options;
 
     schema.add({ [slugField]: { type: String, unique } });
@@ -114,7 +112,9 @@ export class MongooseCorePlugin {
           const ModelConstructor = this.constructor as Model<SlugDocument>;
 
           const checkUniqueness = async (): Promise<string> => {
-            const existing = await ModelConstructor.exists(query);
+            const existing = await ModelConstructor.exists(query).setOptions({
+              skipTenantCheck: true,
+            });
             if (existing) {
               slug = `${baseSlug}-${count++}`;
               query[slugField] = slug;
@@ -138,69 +138,80 @@ export class MongooseCorePlugin {
       [versionField]: { type: Array, default: [] },
     });
 
-    schema.pre<VersioningDocument>(
-      "save",
-      async function (next: HookNextFunction) {
-        if (!this.isNew && this.isModified()) {
-          const clone = this.toObject({ depopulate: true });
-          delete clone[versionField];
-          this[versionField] = this[versionField] || [];
-          this[versionField].push({
-            version: this[versionField].length + 1,
-            data: clone,
-            savedAt: new Date(),
-          });
+    schema.pre("save", function (this: any, next: HookNextFunction) {
+      if (!this.isNew && this.isModified()) {
+        // Depopulate to avoid triggering internal queries
+        const clone = this.toObject({
+          depopulate: true,
+          virtuals: false,
+          getters: false,
+        });
 
-          if (this[versionField].length > 10) {
-            this[versionField].shift();
-          }
+        delete clone[versionField];
+        this[versionField] = this[versionField] || [];
+        this[versionField].push({
+          version: this[versionField].length + 1,
+          data: clone,
+          savedAt: new Date(),
+        });
+
+        if (this[versionField].length > 10) {
+          this[versionField].shift();
         }
-        next();
       }
-    );
+
+      next();
+    });
   }
 
   static MultiTenancy(schema: Schema<any>, options: MultiTenancyOptions = {}) {
     const field = options.field || "shopId";
 
+    // Add tenant field
     schema.add({ [field]: { type: String, required: true, index: true } });
 
     const addTenantScope = function (
-      this: Query<any, any> & TenantQueryHelpers,
+      this: Query<any, any> & {
+        skipTenantCheck?: boolean;
+      } & TenantQueryHelpers,
       next: HookNextFunction
     ) {
+      const op = (this as any).op;
+
+      const skipTenantCheck = this.getOptions()?.skipTenantCheck;
+
+      // Skip internal queries AND save validation
+      if (skipTenantCheck || op === "save") {
+        return next();
+      }
+
       if (!this.getQuery()[field] && this.options?.tenantId) {
         this.where({ [field]: this.options.tenantId });
       }
 
-      if (!this.getQuery()[field]) {
-        const error = new Error("Tenant ID is required but was not provided.");
-        next(error);
-        return;
+      if (!this.getQuery()[field] && !this.options?.tenantId) {
+        return next(new Error("Tenant ID is required but was not provided."));
       }
 
       next();
     };
 
-    schema.pre(
-      "save",
-      function (this: MultiTenancyDocument, next: HookNextFunction) {
-        if (!this[field] && this.tenantId) {
-          this[field] = this.tenantId;
-        }
-
-        if (!this[field]) {
-          const error = new Error(
-            `The ${field} is required to save this document.`
-          );
-          next(error);
-          return;
-        }
-
-        next();
+    // Pre-save middleware for document
+    schema.pre("save", function (this: any, next) {
+      if (!this[field] && this.tenantId) {
+        this[field] = this.tenantId;
       }
-    );
 
+      if (!this[field]) {
+        return next(
+          new Error(`The ${field} is required to save this document.`)
+        );
+      }
+
+      next();
+    });
+
+    // Query middlewares
     schema.pre("find", addTenantScope);
     schema.pre("findOne", addTenantScope);
     schema.pre("countDocuments", addTenantScope);

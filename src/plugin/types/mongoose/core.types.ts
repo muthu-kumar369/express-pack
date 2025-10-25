@@ -1,4 +1,4 @@
-import type { Document, Query, Model, Schema } from "mongoose";
+import type { Document, Query, Model } from "mongoose";
 
 export interface Timestamps {
   createdAt?: Date;

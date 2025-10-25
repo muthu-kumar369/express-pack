@@ -38,7 +38,7 @@ export class RedisClientService {
 
       RedisClientService.redis.on("connect", () => {
         RedisClientService.connected = true;
-        console.log("Connected to Redis");
+        console.info("Connected to Redis");
       });
 
       RedisClientService.redis.on("error", (err: any) => {
@@ -54,7 +54,7 @@ export class RedisClientService {
     options?: RedisSetOptions
   ): Promise<void> {
     if (!RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Skipping set operation.");
+      console.info("Redis is disabled. Skipping set operation.");
       return;
     }
     try {
@@ -63,7 +63,7 @@ export class RedisClientService {
       } else {
         await RedisClientService.redis!.set(key, value);
       }
-      console.log(`Key "${key}" set successfully.`);
+      console.info(`Key "${key}" set successfully.`);
     } catch (err) {
       console.error("Error setting key:", err);
     }
@@ -71,13 +71,13 @@ export class RedisClientService {
 
   static async get(key: string): Promise<string | null | undefined> {
     if (!RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Skipping get operation.");
+      console.info("Redis is disabled. Skipping get operation.");
       return;
     }
     try {
       const value = await RedisClientService.redis!.get(key);
       if (value === null) {
-        console.log(`Key "${key}" not found.`);
+        console.info(`Key "${key}" not found.`);
         return null;
       }
       return value;
@@ -88,15 +88,15 @@ export class RedisClientService {
 
   static async del(key: string): Promise<void> {
     if (!RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Skipping delete operation.");
+      console.info("Redis is disabled. Skipping delete operation.");
       return;
     }
     try {
       const result = await RedisClientService.redis!.del(key);
       if (result === 1) {
-        console.log(`Key "${key}" deleted successfully.`);
+        console.info(`Key "${key}" deleted successfully.`);
       } else {
-        console.log(`Key "${key}" not found.`);
+        console.info(`Key "${key}" not found.`);
       }
     } catch (err) {
       console.error("Error deleting key:", err);
@@ -105,12 +105,12 @@ export class RedisClientService {
 
   static async expire(key: string, seconds: number): Promise<void> {
     if (!RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Skipping expiration operation.");
+      console.info("Redis is disabled. Skipping expiration operation.");
       return;
     }
     try {
       await RedisClientService.redis!.expire(key, seconds);
-      console.log(`Key "${key}" will expire in ${seconds} seconds.`);
+      console.info(`Key "${key}" will expire in ${seconds} seconds.`);
     } catch (err) {
       console.error("Error setting expiration:", err);
     }
@@ -118,7 +118,7 @@ export class RedisClientService {
 
   static async keys(pattern = "*"): Promise<string[] | undefined> {
     if (!RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Skipping keys operation.");
+      console.info("Redis is disabled. Skipping keys operation.");
       return [];
     }
     try {
@@ -131,7 +131,7 @@ export class RedisClientService {
 
   static getClient(): RedisInstance {
     if (!RedisClientService.isRedisEnabled) {
-      console.log("Redis is disabled. Returning null client.");
+      console.info("Redis is disabled. Returning null client.");
       return null;
     }
     return RedisClientService.redis;
@@ -140,7 +140,7 @@ export class RedisClientService {
   static disconnect(): void {
     if (RedisClientService.redis) {
       RedisClientService.redis.disconnect();
-      console.log("Disconnected from Redis");
+      console.info("Disconnected from Redis");
     }
     RedisClientService.connected = false;
   }

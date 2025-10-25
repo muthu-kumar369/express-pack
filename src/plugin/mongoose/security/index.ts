@@ -88,7 +88,9 @@ export class MongooseSecurityPlugin {
           if (this.isNew || this.isModified(field)) {
             const query: any = { [field]: this[field] };
             if (this._id) query._id = { $ne: this._id };
-            const existingDoc = await this.constructor.findOne(query);
+            const existingDoc = await this.constructor
+              .findOne(query)
+              .setOptions({ skipTenantCheck: true });
             if (existingDoc) {
               const errorMessage =
                 messages[field] || `${field} already exists.`;
@@ -112,7 +114,9 @@ export class MongooseSecurityPlugin {
           if (update && update[field]) {
             const query: any = { [field]: update[field] };
             if (this._id) query._id = { $ne: this._id };
-            const existingDoc = await this.model.findOne(query);
+            const existingDoc = await this.model
+              .findOne(query)
+              .setOptions({ skipTenantCheck: true });
             if (existingDoc) {
               const errorMessage =
                 messages[field] || `${field} already exists.`;

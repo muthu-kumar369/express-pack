@@ -1,4 +1,3 @@
-// Import schedule as a named import to avoid namespace issues
 import { schedule, ScheduledTask } from "node-cron";
 import Redlock from "redlock";
 import axios from "axios";
@@ -19,7 +18,7 @@ import type {
 export class CronManager {
   serviceName: string;
   logger: typeof logger;
-  redis: any; // You can refine this with the actual RedisClientType imported if you want
+  redis: any;
   persistent?: boolean;
   timezone?: string;
   persistService?: PersistService;
@@ -43,7 +42,6 @@ export class CronManager {
     this.timezone = timezone;
     this.persistService = persistService;
     this.mongoClient = mongoClient;
-
     this.jobs = new Map();
 
     if (this.persistent && this.persistService === "redis") {
@@ -95,7 +93,8 @@ export class CronManager {
     } else if (this.persistent && this.persistService === "mongodb") {
       return await this.db
         .collection(`cron_${this.serviceName}_jobStates`)
-        .findOne({ jobName });
+        .findOne({ jobName })
+        .setOptions({ skipTenantCheck: true });
     }
     return null;
   }
@@ -106,12 +105,7 @@ export class CronManager {
     apiConfig: CronApiConfig,
     options: JobOptions = {}
   ) {
-    const jobData = {
-      name,
-      cronExpression,
-      apiConfig,
-      options,
-    };
+    const jobData = { name, cronExpression, apiConfig, options };
 
     if (this.persistent && this.persistService === "redis") {
       await this.redis.hset(
@@ -182,6 +176,12 @@ export class CronManager {
     };
 
     const executeTask = async () => {
+      // Skip execution if paused
+      if (job.state === "paused") {
+        this.logger.info(`Job "${name}" skipped because it is paused.`);
+        return;
+      }
+
       const lockKey = `locks:${this.serviceName}:${name}`;
       let lock;
 
@@ -235,7 +235,6 @@ export class CronManager {
       }
     };
 
-    // Here cast options with our ExtendedCronOptions interface
     const scheduledTask = schedule(cronExpression, executeTask, {
       scheduled: true,
       timezone: this.timezone,
@@ -245,9 +244,7 @@ export class CronManager {
     this.jobs.set(name, job);
     this.saveJobDefinition(name, cronExpression, apiConfig, options);
 
-    if (runOnInit) {
-      executeTask();
-    }
+    if (runOnInit) executeTask();
 
     this.logger.info(
       `Job "${name}" registered to call "${apiConfig.url}" on schedule "${cronExpression}".`
@@ -256,47 +253,30 @@ export class CronManager {
 
   pauseJob(name: string) {
     const job = this.jobs.get(name);
-    if (job && job.scheduledTask?.running) {
-      job.scheduledTask.stop();
-      job.state = "paused";
-      this.trackJobState(name, "paused");
-      this.logger.info(`Job "${name}" paused.`);
-    }
+    if (!job) return;
+
+    job.state = "paused";
+    this.trackJobState(name, "paused");
+    this.logger.info(`Job "${name}" paused.`);
   }
 
   resumeJob(name: string) {
     const job = this.jobs.get(name);
-    if (
-      job &&
-      job.scheduledTask &&
-      !job.scheduledTask?.running &&
-      job.state === "paused"
-    ) {
-      job.scheduledTask.start();
-      job.state = "running";
-      this.trackJobState(name, "running");
-      this.logger.info(`Job "${name}" resumed.`);
-    }
-  }
+    if (!job) return;
 
-  startJob(name: string) {
-    const job = this.jobs.get(name);
-    if (job && job.scheduledTask && !job.scheduledTask?.running) {
-      job.scheduledTask.start();
-      job.state = "running";
-      this.trackJobState(name, "running");
-      this.logger.info(`Job "${name}" started.`);
-    }
+    job.state = "running";
+    this.trackJobState(name, "running");
+    this.logger.info(`Job "${name}" resumed.`);
   }
 
   stopJob(name: string) {
     const job = this.jobs.get(name);
-    if (job && job.scheduledTask?.running) {
-      job.scheduledTask.stop();
-      job.state = "stopped";
-      this.trackJobState(name, "stopped");
-      this.logger.info(`Job "${name}" stopped.`);
-    }
+    if (!job || !job.scheduledTask?.running) return;
+
+    job.scheduledTask.stop();
+    job.state = "stopped";
+    this.trackJobState(name, "stopped");
+    this.logger.info(`Job "${name}" stopped.`);
   }
 
   async removeJob(name: string) {
