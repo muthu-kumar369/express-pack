@@ -86,7 +86,7 @@ __export(index_exports, {
   availablePlugins: () => availablePlugins,
   i18n: () => i18n,
   logger: () => logger,
-  z: () => z2
+  z: () => z3
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -248,6 +248,26 @@ PassportService.initialized = false;
 var import_jsonwebtoken2 = __toESM(require("jsonwebtoken"), 1);
 var import_passport2 = __toESM(require("passport"), 1);
 var AuthMiddleware = class {
+  /**
+   * Flexible authentication middleware that can handle user auth, role auth, or scope auth.
+   * 
+   * @param options - Authentication options
+   * @param options.userAuth - User authentication configuration
+   * @param options.roleAuth - Role authorization configuration
+   * @param options.scopeAuth - Scope authorization configuration
+   * @returns Express middleware function
+   * 
+   * @example
+   * ```typescript
+   * router.get('/admin',
+   *   AuthMiddleware.authenticateJWT({
+   *     userAuth: { secret: process.env.JWT_SECRET },
+   *     roleAuth: { allowedRoles: ['admin'] }
+   *   }),
+   *   adminHandler
+   * );
+   * ```
+   */
   static authenticateJWT({
     userAuth = {},
     roleAuth = {},
@@ -265,11 +285,66 @@ var AuthMiddleware = class {
     return (req, res, next) => next();
   }
   /**
-   * Returns middleware for authenticating with a specific strategy
+   * Returns middleware for authenticating with a Passport.js strategy.
+   * 
+   * @param strategy - Passport strategy name (e.g., 'google', 'facebook', 'github')
+   * @param options - Strategy-specific options
+   * @param callback - Optional callback function
+   * @returns Passport authentication middleware
+   * 
+   * @example
+   * ```typescript
+   * router.get('/auth/google',
+   *   AuthMiddleware.authenticatePassport('google', {
+   *     scope: ['profile', 'email']
+   *   })
+   * );
+   * 
+   * router.get('/auth/google/callback',
+   *   AuthMiddleware.authenticatePassport('google', { failureRedirect: '/login' }),
+   *   (req, res) => res.redirect('/dashboard')
+   * );
+   * ```
    */
   static authenticatePassport(strategy, options, callback) {
     return import_passport2.default.authenticate(strategy, options, callback);
   }
+  /**
+   * Authenticates a user using JWT token from request headers.
+   * Verifies the token and optionally fetches user data via callback.
+   * 
+   * @param options - Authentication options
+   * @param options.secret - JWT secret key (defaults to process.env.JWT_SECRET)
+   * @param options.headerKey - Header key to extract token from (default: 'authorization')
+   * @param options.usingBearer - Whether to expect 'Bearer' prefix (default: true)
+   * @param options.callback - Optional async function to fetch user data from decoded token
+   * @returns Express middleware function
+   * 
+   * @throws {401} If authorization token is not found
+   * @throws {403} If token is invalid or expired
+   * 
+   * @example
+   * ```typescript
+   * import { AuthMiddleware } from 'express-pack';
+   * import User from './models/User';
+   * 
+   * router.get('/protected',
+   *   AuthMiddleware.authenticateUser({
+   *     secret: process.env.JWT_SECRET,
+   *     headerKey: 'authorization',
+   *     usingBearer: true,
+   *     callback: async (decoded) => {
+   *       // Fetch full user object from database
+   *       return await User.findById(decoded.userId);
+   *     }
+   *   }),
+   *   (req, res) => {
+   *     // req.user is now populated with user data
+   *     res.json({ user: req.user });
+   *   }
+   * );
+   * ```
+   */
   static authenticateUser(options) {
     return async (req, res, next) => {
       const {
@@ -297,29 +372,119 @@ var AuthMiddleware = class {
       }
     };
   }
+  /**
+   * Authorizes user based on role(s). Must be used after {@link authenticateUser}.
+   * 
+   * @param options - Authorization options
+   * @param options.allowedRoles - Array of allowed role names
+   * @param options.checkAll - If true, user must have ALL roles; if false, user needs at least ONE role (default: true)
+   * @returns Express middleware function
+   * 
+   * @throws {403} If user has no roles or doesn't have required role(s)
+   * 
+   * @example
+   * ```typescript
+   * // User must have 'admin' role
+   * router.delete('/users/:id',
+   *   AuthMiddleware.authenticateUser({ secret: process.env.JWT_SECRET }),
+   *   AuthMiddleware.authorizeRole({ allowedRoles: ['admin'] }),
+   *   deleteUser
+   * );
+   * 
+   * // User must have BOTH 'admin' AND 'moderator' roles
+   * router.post('/ban-user',
+   *   AuthMiddleware.authenticateUser({ secret: process.env.JWT_SECRET }),
+   *   AuthMiddleware.authorizeRole({ 
+   *     allowedRoles: ['admin', 'moderator'],
+   *     checkAll: true 
+   *   }),
+   *   banUser
+   * );
+   * 
+   * // User needs at least ONE of: 'admin', 'editor', or 'author'
+   * router.post('/posts',
+   *   AuthMiddleware.authenticateUser({ secret: process.env.JWT_SECRET }),
+   *   AuthMiddleware.authorizeRole({ 
+   *     allowedRoles: ['admin', 'editor', 'author'],
+   *     checkAll: false 
+   *   }),
+   *   createPost
+   * );
+   * ```
+   */
   static authorizeRole({
     allowedRoles = [],
     checkAll = true
   }) {
     return (req, res, next) => {
-      const userRole = req.user?.role;
-      if (!userRole) {
+      const userRoles = Array.isArray(req.user?.role) ? req.user.role : req.user?.role ? [req.user.role] : [];
+      if (!userRoles.length) {
         return res.status(403).json({
-          status: "forbidden",
-          message: "No role found for the authenticated user. Please ensure your token includes a role."
+          error: "Forbidden",
+          message: "No role(s) found for the authenticated user. Please ensure your token includes a valid role field."
         });
       }
-      if (!allowedRoles.includes(userRole)) {
-        return res.status(403).json({
-          status: "forbidden",
-          message: `Access denied. Required role(s): [${allowedRoles.join(
-            ", "
-          )}], but found: ${userRole}.`
-        });
+      let hasRole = false;
+      if (checkAll) {
+        hasRole = allowedRoles.every((role) => userRoles.includes(role));
+      } else {
+        hasRole = allowedRoles.some((role) => userRoles.includes(role));
       }
-      next();
+      if (hasRole) return next();
+      const missingRoles = allowedRoles.filter((r) => !userRoles.includes(r));
+      return res.status(403).json({
+        error: "Forbidden",
+        message: checkAll ? `Access denied. Missing required role(s): [${missingRoles.join(
+          ", "
+        )}] to access this resource.` : `Access denied. You need at least one of the following roles: [${allowedRoles.join(
+          ", "
+        )}]. Found role(s): [${userRoles.join(", ")}].`,
+        userRoles
+      });
     };
   }
+  /**
+   * Authorizes user based on permission scope(s). Must be used after {@link authenticateUser}.
+   * 
+   * @param options - Authorization options
+   * @param options.requiredScopes - Array of required permission scopes
+   * @param options.checkAll - If true, user must have ALL scopes; if false, user needs at least ONE scope (default: true)
+   * @returns Express middleware function
+   * 
+   * @throws {403} If user doesn't have required scope(s)
+   * 
+   * @example
+   * ```typescript
+   * // User must have 'read:users' scope
+   * router.get('/users',
+   *   AuthMiddleware.authenticateUser({ secret: process.env.JWT_SECRET }),
+   *   AuthMiddleware.authorizeScope({ 
+   *     requiredScopes: ['read:users'] 
+   *   }),
+   *   getUsers
+   * );
+   * 
+   * // User must have BOTH 'write:posts' AND 'publish:posts' scopes
+   * router.post('/posts/publish',
+   *   AuthMiddleware.authenticateUser({ secret: process.env.JWT_SECRET }),
+   *   AuthMiddleware.authorizeScope({ 
+   *     requiredScopes: ['write:posts', 'publish:posts'],
+   *     checkAll: true 
+   *   }),
+   *   publishPost
+   * );
+   * 
+   * // User needs at least ONE of: 'read:public' or 'read:private'
+   * router.get('/documents',
+   *   AuthMiddleware.authenticateUser({ secret: process.env.JWT_SECRET }),
+   *   AuthMiddleware.authorizeScope({ 
+   *     requiredScopes: ['read:public', 'read:private'],
+   *     checkAll: false 
+   *   }),
+   *   getDocuments
+   * );
+   * ```
+   */
   static authorizeScope({
     requiredScopes = [],
     checkAll = true
@@ -347,6 +512,32 @@ var AuthMiddleware = class {
       });
     };
   }
+  /**
+   * Extracts JWT token from request headers.
+   * 
+   * @param options - Token extraction options
+   * @param options.req - Express request object
+   * @param options.headerKey - Header key to extract token from (default: 'authorization')
+   * @param options.usingBearer - Whether to expect 'Bearer' prefix (default: true)
+   * @returns Extracted token string or undefined if not found
+   * 
+   * @example
+   * ```typescript
+   * // Extract from 'Authorization: Bearer <token>'
+   * const token = AuthMiddleware.extractToken({
+   *   req,
+   *   headerKey: 'authorization',
+   *   usingBearer: true
+   * });
+   * 
+   * // Extract from custom header without Bearer prefix
+   * const token = AuthMiddleware.extractToken({
+   *   req,
+   *   headerKey: 'x-api-key',
+   *   usingBearer: false
+   * });
+   * ```
+   */
   static extractToken({
     req,
     headerKey = "authorization",
@@ -880,12 +1071,278 @@ var express_session_config_default = sessionConfig;
 
 // src/framework/express/index.ts
 var import_express_session2 = __toESM(require("express-session"), 1);
+
+// src/util/openapi/zod-converter.ts
+var import_zod_to_openapi = require("@asteasolutions/zod-to-openapi");
+var import_zod = require("zod");
+(0, import_zod_to_openapi.extendZodWithOpenApi)(import_zod.z);
+function zodToOpenAPI(zodSchema) {
+  if (!zodSchema) {
+    return { type: "object" };
+  }
+  try {
+    if (zodSchema._def && zodSchema._def.openapi) {
+      return zodSchema._def.openapi;
+    }
+    const zodType = zodSchema._def?.typeName;
+    switch (zodType) {
+      case "ZodString":
+        return { type: "string" };
+      case "ZodNumber":
+        return { type: "number" };
+      case "ZodBoolean":
+        return { type: "boolean" };
+      case "ZodArray":
+        return {
+          type: "array",
+          items: zodToOpenAPI(zodSchema._def.type)
+        };
+      case "ZodObject":
+        const properties = {};
+        const required = [];
+        Object.entries(zodSchema._def.shape()).forEach(([key, value]) => {
+          properties[key] = zodToOpenAPI(value);
+          if (!value.isOptional()) {
+            required.push(key);
+          }
+        });
+        return {
+          type: "object",
+          properties,
+          required: required.length > 0 ? required : void 0
+        };
+      default:
+        return { type: "object" };
+    }
+  } catch (error) {
+    return { type: "object" };
+  }
+}
+
+// src/util/openapi/generator.ts
+var import_fs = __toESM(require("fs"), 1);
+var OpenAPIGenerator = class {
+  constructor(config8 = {}) {
+    this.spec = null;
+    this.config = {
+      enabled: config8.enabled ?? true,
+      output: config8.output ?? "./openapi.json",
+      ui: config8.ui ?? "/api-docs",
+      info: {
+        title: config8.info?.title ?? "API Documentation",
+        version: config8.info?.version ?? "1.0.0",
+        description: config8.info?.description ?? "API documentation generated by express-pack"
+      },
+      servers: config8.servers ?? [
+        { url: "http://localhost:3000", description: "Development server" }
+      ],
+      security: config8.security ?? []
+    };
+  }
+  /**
+   * Generate OpenAPI specification from routes
+   */
+  generate(routes) {
+    const paths = {};
+    const components = {
+      schemas: {},
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT"
+        }
+      }
+    };
+    routes.forEach(({ prefix = "", version = "", route: routeList = [] }) => {
+      const basePath = prefix + version;
+      routeList.forEach(({ path: path3, route }) => {
+        const fullPath = basePath + path3;
+        paths[fullPath] = this.extractRouteInfo(route);
+      });
+    });
+    this.spec = {
+      openapi: "3.0.0",
+      info: this.config.info,
+      servers: this.config.servers,
+      paths,
+      components
+    };
+    return this.spec;
+  }
+  /**
+   * Extract route information from Express router
+   */
+  extractRouteInfo(router) {
+    const methods = {};
+    router.stack?.forEach((layer) => {
+      if (layer.route) {
+        const { path: path3, methods: routeMethods } = layer.route;
+        Object.keys(routeMethods).forEach((method) => {
+          if (routeMethods[method]) {
+            methods[method] = this.generateMethodDoc(layer, method);
+          }
+        });
+      }
+    });
+    return methods;
+  }
+  /**
+   * Generate documentation for a specific HTTP method
+   */
+  generateMethodDoc(layer, method) {
+    const metadata = layer.route?.metadata || {};
+    return {
+      summary: metadata.summary || `${method.toUpperCase()} endpoint`,
+      description: metadata.description || "",
+      tags: metadata.tags || [],
+      parameters: this.extractParameters(metadata),
+      requestBody: this.extractRequestBody(metadata),
+      responses: this.extractResponses(metadata),
+      security: metadata.requiresAuth ? [{ bearerAuth: [] }] : void 0
+    };
+  }
+  /**
+   * Extract parameters from metadata
+   */
+  extractParameters(metadata) {
+    const params = [];
+    if (metadata.params) {
+      Object.keys(metadata.params).forEach((name) => {
+        params.push({
+          name,
+          in: "path",
+          required: true,
+          schema: zodToOpenAPI(metadata.params[name])
+        });
+      });
+    }
+    if (metadata.query) {
+      Object.keys(metadata.query).forEach((name) => {
+        params.push({
+          name,
+          in: "query",
+          required: false,
+          schema: zodToOpenAPI(metadata.query[name])
+        });
+      });
+    }
+    return params;
+  }
+  /**
+   * Extract request body from metadata
+   */
+  extractRequestBody(metadata) {
+    if (!metadata.body) return void 0;
+    return {
+      required: true,
+      content: {
+        "application/json": {
+          schema: zodToOpenAPI(metadata.body)
+        }
+      }
+    };
+  }
+  /**
+   * Extract responses from metadata
+   */
+  extractResponses(metadata) {
+    return {
+      200: {
+        description: "Successful response",
+        content: {
+          "application/json": {
+            schema: metadata.response || { type: "object" }
+          }
+        }
+      },
+      400: {
+        description: "Bad request",
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                success: { type: "boolean", example: false },
+                error: { type: "string" },
+                code: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+      401: {
+        description: "Unauthorized"
+      },
+      500: {
+        description: "Internal server error"
+      }
+    };
+  }
+  /**
+   * Save specification to file
+   */
+  saveToFile(filepath) {
+    if (!this.spec) {
+      throw new Error("No specification generated. Call generate() first.");
+    }
+    const path3 = filepath || this.config.output;
+    import_fs.default.writeFileSync(path3, JSON.stringify(this.spec, null, 2));
+  }
+  /**
+   * Get generated specification
+   */
+  getSpec() {
+    return this.spec;
+  }
+};
+
+// src/util/openapi/ui.ts
+var import_swagger_ui_express = __toESM(require("swagger-ui-express"), 1);
+function setupSwaggerUI(app, spec, path3 = "/api-docs") {
+  app.use(
+    path3,
+    import_swagger_ui_express.default.serve,
+    import_swagger_ui_express.default.setup(spec, {
+      customCss: `
+        .swagger-ui .topbar { display: none }
+        .swagger-ui .information-container { margin: 20px 0 }
+      `,
+      customSiteTitle: "API Documentation",
+      customfavIcon: "/favicon.ico"
+    })
+  );
+}
+
+// src/framework/express/index.ts
 var _app, _initialized4, _ExpressPack_static, applyMiddleware_fn;
 var ExpressPack = class {
   /**
-   * Initializes the express app with provided middleware config
-   * @param config Middleware configuration object
-   * @returns express app
+   * Initializes the Express application with provided middleware configuration.
+   * This method must be called before using any other ExpressPack methods.
+   * 
+   * @param options - Configuration options
+   * @param options.app - Express application instance
+   * @param options.config - Middleware configuration object
+   * @returns Promise that resolves to the configured Express application
+   * 
+   * @throws {Error} If app is already initialized (returns existing app instead)
+   * 
+   * @example
+   * ```typescript
+   * const app = express();
+   * await ExpressPack.init({
+   *   app,
+   *   config: {
+   *     cors: { origin: '*', credentials: true },
+   *     bodyParser: { json: { limit: '10mb' } },
+   *     logger: { level: 'debug' },
+   *     security: { hsts: { maxAge: 31536000 } },
+   *     compression: { level: 6 },
+   *     'express-rate-limit': { windowMs: 15 * 60 * 1000, max: 100 }
+   *   }
+   * });
+   * ```
    */
   static async init({
     app,
@@ -908,7 +1365,16 @@ var ExpressPack = class {
     return __privateGet(this, _app);
   }
   /**
-   * Returns the initialized app instance
+   * Returns the initialized Express application instance.
+   * 
+   * @returns The configured Express application
+   * @throws {Error} If app is not initialized. Call {@link init} first.
+   * 
+   * @example
+   * ```typescript
+   * const app = ExpressPack.getApp();
+   * app.listen(3000, () => console.log('Server running'));
+   * ```
    */
   static getApp() {
     if (!__privateGet(this, _initialized4) || !__privateGet(this, _app)) {
@@ -919,16 +1385,63 @@ var ExpressPack = class {
     return __privateGet(this, _app);
   }
   /**
-   * Returns new Router instance
+   * Creates and returns a new Express Router instance.
+   * 
+   * @returns A new Express Router instance
+   * 
+   * @example
+   * ```typescript
+   * const router = ExpressPack.getRouter();
+   * router.get('/users', (req, res) => {
+   *   res.json({ users: [] });
+   * });
+   * ```
    */
   static getRouter() {
     return import_express.default.Router();
   }
   /**
-   * Binds routes to app after init
-   * @param routes Array of route config { path, route }
+   * Registers route groups with the Express application.
+   * Must be called after {@link init}.
+   * 
+   * @param options - Route configuration options
+   * @param options.routes - Array of route groups with prefix, version, and routes
+   * @param options.openapi - Optional OpenAPI configuration for automatic API documentation
+   * 
+   * @throws {Error} If app is not initialized
+   * 
+   * @example
+   * ```typescript
+   * const userRouter = ExpressPack.getRouter();
+   * userRouter.get('/', getAllUsers);
+   * 
+   * ExpressPack.initRoutes({
+   *   routes: [{
+   *     prefix: '/api',
+   *     version: '/v1',
+   *     route: [
+   *       { path: '/users', route: userRouter },
+   *       { path: '/posts', route: postRouter }
+   *     ]
+   *   }],
+   *   openapi: {
+   *     enabled: true,
+   *     output: './openapi.json',
+   *     ui: '/api-docs',
+   *     info: {
+   *       title: 'My API',
+   *       version: '1.0.0'
+   *     }
+   *   }
+   * });
+   * // Routes will be available at: /api/v1/users, /api/v1/posts
+   * // API docs will be available at: /api-docs
+   * ```
    */
-  static initRoutes({ routes = [] }) {
+  static initRoutes({
+    routes = [],
+    openapi
+  }) {
     if (!__privateGet(this, _initialized4) || !__privateGet(this, _app)) {
       throw new Error("Cannot bind routes before app initialization.");
     }
@@ -939,9 +1452,28 @@ var ExpressPack = class {
         __privateGet(this, _app).use(fullPath, route);
       });
     });
+    if (openapi?.enabled) {
+      const generator = new OpenAPIGenerator(openapi);
+      const spec = generator.generate(routes);
+      if (openapi.output) {
+        generator.saveToFile(openapi.output);
+      }
+      if (openapi.ui && typeof openapi.ui === "string") {
+        setupSwaggerUI(__privateGet(this, _app), spec, openapi.ui);
+      }
+    }
   }
   /**
-   * Check if app is initialized
+   * Checks if the Express application has been initialized.
+   * 
+   * @returns `true` if initialized, `false` otherwise
+   * 
+   * @example
+   * ```typescript
+   * if (!ExpressPack.isInitialized()) {
+   *   await ExpressPack.init({ app, config });
+   * }
+   * ```
    */
   static isInitialized() {
     return __privateGet(this, _initialized4);
@@ -999,8 +1531,100 @@ var RequestTracer = class {
 };
 
 // src/middleware/request-validator/index.ts
-var import_zod = require("zod");
+var import_zod2 = require("zod");
 var RequestValidator = class {
+  /**
+   * Creates middleware that validates request data against Zod schemas.
+   * 
+   * Validates `req.params`, `req.query`, and `req.body` against provided schemas.
+   * Parsed and validated data is attached to `req.data` for use in route handlers.
+   * 
+   * @param options - Validation schema options
+   * @param options.params - Zod schema for URL parameters
+   * @param options.query - Zod schema for query string parameters
+   * @param options.body - Zod schema for request body
+   * @returns Express middleware function
+   * 
+   * @throws {400} If validation fails, returns flattened Zod error details
+   * @throws {500} If an unexpected error occurs during validation
+   * 
+   * @example
+   * ```typescript
+   * import { RequestValidator, z } from 'express-pack';
+   * 
+   * // Validate all three: params, query, and body
+   * router.put('/users/:id',
+   *   RequestValidator.validateRequest({
+   *     params: z.object({
+   *       id: z.string().uuid()
+   *     }),
+   *     query: z.object({
+   *       force: z.boolean().optional()
+   *     }),
+   *     body: z.object({
+   *       name: z.string().min(2),
+   *       email: z.string().email()
+   *     })
+   *   }),
+   *   updateUser
+   * );
+   * 
+   * // Validate only body
+   * router.post('/posts',
+   *   RequestValidator.validateRequest({
+   *     body: z.object({
+   *       title: z.string().min(5).max(100),
+   *       content: z.string().min(10),
+   *       tags: z.array(z.string()).optional(),
+   *       published: z.boolean().default(false)
+   *     })
+   *   }),
+   *   createPost
+   * );
+   * 
+   * // Validate with custom types
+   * const createUserSchema = z.object({
+   *   name: z.string().min(2, 'Name must be at least 2 characters'),
+   *   email: z.string().email('Invalid email format'),
+   *   password: z.string()
+   *     .min(8, 'Password must be at least 8 characters')
+   *     .regex(/[A-Z]/, 'Password must contain uppercase letter')
+   *     .regex(/[0-9]/, 'Password must contain number'),
+   *   role: z.enum(['user', 'admin', 'moderator']).default('user')
+   * });
+   * 
+   * router.post('/register',
+   *   RequestValidator.validateRequest({ body: createUserSchema }),
+   *   (req, res) => {
+   *     // req.data is fully typed based on schema
+   *     const { name, email, password, role } = req.data;
+   *     // Create user...
+   *   }
+   * );
+   * 
+   * // Nested object validation
+   * router.post('/orders',
+   *   RequestValidator.validateRequest({
+   *     body: z.object({
+   *       customer: z.object({
+   *         name: z.string(),
+   *         email: z.string().email()
+   *       }),
+   *       items: z.array(z.object({
+   *         productId: z.string(),
+   *         quantity: z.number().positive()
+   *       })).min(1, 'At least one item required'),
+   *       shippingAddress: z.object({
+   *         street: z.string(),
+   *         city: z.string(),
+   *         zipCode: z.string().regex(/^\d{5}$/)
+   *       })
+   *     })
+   *   }),
+   *   createOrder
+   * );
+   * ```
+   */
   static validateRequest({ params, query, body }) {
     return (req, res, next) => {
       try {
@@ -1012,7 +1636,7 @@ var RequestValidator = class {
         req.data = parsed;
         next();
       } catch (err) {
-        if (err instanceof import_zod.ZodError) {
+        if (err instanceof import_zod2.ZodError) {
           return res.status(400).json({ error: err.flatten() });
         }
         return res.status(500).json({ error: "Internal Server Error" });
@@ -1475,6 +2099,30 @@ var _RedisClientService = class _RedisClientService {
     }
     _RedisClientService.instance = this;
   }
+  /**
+   * Enables or disables Redis and initializes connection if enabled.
+   * 
+   * @param enable - Whether to enable Redis (default: true)
+   * @param config - Redis connection configuration
+   * @param config.REDIS_HOST - Redis server host
+   * @param config.REDIS_PORT - Redis server port
+   * @param config.REDIS_PASSWORD - Redis password (optional)
+   * @param config.REDIS_DB - Redis database number (default: 0)
+   * 
+   * @example
+   * ```typescript
+   * // Enable Redis
+   * RedisClientService.enableRedis(true, {
+   *   REDIS_HOST: process.env.REDIS_HOST || '127.0.0.1',
+   *   REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379'),
+   *   REDIS_PASSWORD: process.env.REDIS_PASSWORD,
+   *   REDIS_DB: 0
+   * });
+   * 
+   * // Disable Redis
+   * RedisClientService.enableRedis(false, {});
+   * ```
+   */
   static enableRedis(enable = true, config8) {
     _RedisClientService.isRedisEnabled = enable;
     if (enable) {
@@ -1483,6 +2131,13 @@ var _RedisClientService = class _RedisClientService {
       _RedisClientService.disconnect();
     }
   }
+  /**
+   * Initializes Redis connection with provided configuration.
+   * 
+   * @param config - Redis connection configuration
+   * 
+   * @private
+   */
   static init(config8) {
     if (_RedisClientService.isRedisEnabled && !_RedisClientService.connected) {
       _RedisClientService.redis = new import_ioredis.default({
@@ -1501,6 +2156,32 @@ var _RedisClientService = class _RedisClientService {
       });
     }
   }
+  /**
+   * Sets a key-value pair in Redis with optional expiration.
+   * 
+   * @param key - Redis key
+   * @param value - Value to store (must be string)
+   * @param options - Set options
+   * @param options.expire - TTL in seconds (optional)
+   * 
+   * @example
+   * ```typescript
+   * // Set without expiration
+   * await RedisClientService.set('config:theme', 'dark');
+   * 
+   * // Set with 1 hour expiration
+   * await RedisClientService.set('session:abc123', JSON.stringify(sessionData), {
+   *   expire: 3600
+   * });
+   * 
+   * // Cache-aside pattern
+   * const cacheKey = `user:${userId}`;
+   * const user = await User.findById(userId);
+   * await RedisClientService.set(cacheKey, JSON.stringify(user), {
+   *   expire: 300 // 5 minutes
+   * });
+   * ```
+   */
   static async set(key, value, options) {
     if (!_RedisClientService.isRedisEnabled) {
       console.info("Redis is disabled. Skipping set operation.");
@@ -1517,6 +2198,39 @@ var _RedisClientService = class _RedisClientService {
       console.error("Error setting key:", err);
     }
   }
+  /**
+   * Retrieves a value from Redis by key.
+   * 
+   * @param key - Redis key to retrieve
+   * @returns The value if found, null if not found, undefined if Redis is disabled
+   * 
+   * @example
+   * ```typescript
+   * // Simple get
+   * const value = await RedisClientService.get('config:theme');
+   * 
+   * // Get with JSON parsing
+   * const cached = await RedisClientService.get('user:123');
+   * const user = cached ? JSON.parse(cached) : null;
+   * 
+   * // Cache-aside pattern with fallback
+   * async function getUser(userId: string) {
+   *   const cacheKey = `user:${userId}`;
+   *   const cached = await RedisClientService.get(cacheKey);
+   *   
+   *   if (cached) {
+   *     return JSON.parse(cached);
+   *   }
+   *   
+   *   const user = await User.findById(userId);
+   *   await RedisClientService.set(cacheKey, JSON.stringify(user), {
+   *     expire: 300
+   *   });
+   *   
+   *   return user;
+   * }
+   * ```
+   */
   static async get(key) {
     if (!_RedisClientService.isRedisEnabled) {
       console.info("Redis is disabled. Skipping get operation.");
@@ -1533,6 +2247,24 @@ var _RedisClientService = class _RedisClientService {
       console.error("Error getting key:", err);
     }
   }
+  /**
+   * Deletes a key from Redis.
+   * 
+   * @param key - Redis key to delete
+   * 
+   * @example
+   * ```typescript
+   * // Delete single key
+   * await RedisClientService.del('session:abc123');
+   * 
+   * // Cache invalidation on update
+   * async function updateUser(userId: string, updates: any) {
+   *   const user = await User.findByIdAndUpdate(userId, updates);
+   *   await RedisClientService.del(`user:${userId}`); // Invalidate cache
+   *   return user;
+   * }
+   * ```
+   */
   static async del(key) {
     if (!_RedisClientService.isRedisEnabled) {
       console.info("Redis is disabled. Skipping delete operation.");
@@ -1549,6 +2281,23 @@ var _RedisClientService = class _RedisClientService {
       console.error("Error deleting key:", err);
     }
   }
+  /**
+   * Sets expiration time on an existing key.
+   * 
+   * @param key - Redis key
+   * @param seconds - TTL in seconds
+   * 
+   * @example
+   * ```typescript
+   * // Set expiration on existing key
+   * await RedisClientService.expire('session:abc123', 1800); // 30 minutes
+   * 
+   * // Extend session timeout
+   * async function extendSession(sessionId: string) {
+   *   await RedisClientService.expire(`session:${sessionId}`, 3600);
+   * }
+   * ```
+   */
   static async expire(key, seconds) {
     if (!_RedisClientService.isRedisEnabled) {
       console.info("Redis is disabled. Skipping expiration operation.");
@@ -1561,6 +2310,28 @@ var _RedisClientService = class _RedisClientService {
       console.error("Error setting expiration:", err);
     }
   }
+  /**
+   * Lists all keys matching a pattern.
+   * 
+   * @param pattern - Redis key pattern (default: '*' for all keys)
+   * @returns Array of matching keys
+   * 
+   * @example
+   * ```typescript
+   * // Get all keys
+   * const allKeys = await RedisClientService.keys('*');
+   * 
+   * // Get keys with pattern
+   * const userKeys = await RedisClientService.keys('user:*');
+   * const sessionKeys = await RedisClientService.keys('session:*');
+   * 
+   * // Clear all user cache
+   * const keys = await RedisClientService.keys('user:*');
+   * for (const key of keys) {
+   *   await RedisClientService.del(key);
+   * }
+   * ```
+   */
   static async keys(pattern = "*") {
     if (!_RedisClientService.isRedisEnabled) {
       console.info("Redis is disabled. Skipping keys operation.");
@@ -1573,6 +2344,31 @@ var _RedisClientService = class _RedisClientService {
       console.error("Error retrieving keys:", err);
     }
   }
+  /**
+   * Returns the underlying Redis client instance for advanced operations.
+   * 
+   * @returns Redis client instance or null if disabled
+   * 
+   * @example
+   * ```typescript
+   * // Get client for advanced operations
+   * const client = RedisClientService.getClient();
+   * 
+   * if (client) {
+   *   // Use Redis pipeline
+   *   const pipeline = client.pipeline();
+   *   pipeline.set('key1', 'value1');
+   *   pipeline.set('key2', 'value2');
+   *   await pipeline.exec();
+   *   
+   *   // Use Redis transactions
+   *   await client.multi()
+   *     .set('key1', 'value1')
+   *     .set('key2', 'value2')
+   *     .exec();
+   * }
+   * ```
+   */
   static getClient() {
     if (!_RedisClientService.isRedisEnabled) {
       console.info("Redis is disabled. Returning null client.");
@@ -1580,6 +2376,18 @@ var _RedisClientService = class _RedisClientService {
     }
     return _RedisClientService.redis;
   }
+  /**
+   * Disconnects from Redis server.
+   * 
+   * @example
+   * ```typescript
+   * // Graceful shutdown
+   * process.on('SIGTERM', () => {
+   *   RedisClientService.disconnect();
+   *   process.exit(0);
+   * });
+   * ```
+   */
   static disconnect() {
     if (_RedisClientService.redis) {
       _RedisClientService.redis.disconnect();
@@ -2808,7 +3616,7 @@ _AxiosHelper.instance = null;
 var AxiosHelper = _AxiosHelper;
 
 // src/third-party/zod/index.ts
-var z2 = __toESM(require("zod"), 1);
+var z3 = __toESM(require("zod"), 1);
 
 // src/util/date/business/index.ts
 var import_date_fns2 = require("date-fns");
@@ -3638,6 +4446,111 @@ var i18n = {
 // src/util/response/index.ts
 var ResponseUtil = class {
 };
+/**
+ * Sends a standardized API response with i18n support.
+ * 
+ * Formats the response with:
+ * - `success`: Boolean indicating success/failure
+ * - `code`: Application-specific status code
+ * - `message`: Localized message based on code and locale
+ * - `data`: Optional response data
+ * - `requestId`: Request tracking ID (if available)
+ * 
+ * @param req - Express request object
+ * @param res - Express response object
+ * @param code - Message code for i18n lookup (e.g., 'SUCCESS', 'NOT_FOUND', 'VALIDATION_ERROR')
+ * @param data - Optional data to include in response
+ * 
+ * @throws {Error} If code parameter is not provided
+ * 
+ * @example
+ * ```typescript
+ * import { ResponseUtil } from 'express-pack';
+ * 
+ * // Success with data
+ * ResponseUtil.send(req, res, 'SUCCESS', {
+ *   user: { id: 1, name: 'John' }
+ * });
+ * // Response: { success: true, code: 200, message: "Success", data: {...}, requestId: "..." }
+ * 
+ * // Success without data
+ * ResponseUtil.send(req, res, 'NO_CONTENT');
+ * // Response: { success: true, code: 204, message: "No content", requestId: "..." }
+ * 
+ * // Error response
+ * ResponseUtil.send(req, res, 'NOT_FOUND');
+ * // Response: { success: false, code: 404, message: "Not found", requestId: "..." }
+ * 
+ * // Validation error with details
+ * ResponseUtil.send(req, res, 'VALIDATION_ERROR', {
+ *   errors: [
+ *     { field: 'email', message: 'Invalid email format' },
+ *     { field: 'password', message: 'Password too short' }
+ *   ]
+ * });
+ * 
+ * // Custom business logic errors
+ * ResponseUtil.send(req, res, 'INSUFFICIENT_BALANCE', {
+ *   balance: 50,
+ *   required: 100
+ * });
+ * 
+ * // Localized responses (based on req.locale)
+ * // If req.locale = 'es', message will be in Spanish
+ * ResponseUtil.send(req, res, 'SUCCESS', { user });
+ * 
+ * // Common usage patterns
+ * 
+ * // Create resource
+ * router.post('/posts', async (req, res) => {
+ *   const post = await Post.create(req.body);
+ *   ResponseUtil.send(req, res, 'CREATED', { post });
+ * });
+ * 
+ * // Update resource
+ * router.put('/posts/:id', async (req, res) => {
+ *   const post = await Post.findByIdAndUpdate(req.params.id, req.body);
+ *   if (!post) {
+ *     return ResponseUtil.send(req, res, 'NOT_FOUND');
+ *   }
+ *   ResponseUtil.send(req, res, 'SUCCESS', { post });
+ * });
+ * 
+ * // Delete resource
+ * router.delete('/posts/:id', async (req, res) => {
+ *   await Post.findByIdAndDelete(req.params.id);
+ *   ResponseUtil.send(req, res, 'NO_CONTENT');
+ * });
+ * 
+ * // List with pagination
+ * router.get('/posts', async (req, res) => {
+ *   const { page = 1, limit = 10 } = req.query;
+ *   const posts = await Post.paginate({ page, limit });
+ *   ResponseUtil.send(req, res, 'SUCCESS', {
+ *     posts: posts.docs,
+ *     pagination: {
+ *       page: posts.page,
+ *       totalPages: posts.totalPages,
+ *       total: posts.totalDocs
+ *     }
+ *   });
+ * });
+ * 
+ * // Error handling
+ * router.get('/protected', async (req, res) => {
+ *   if (!req.user) {
+ *     return ResponseUtil.send(req, res, 'UNAUTHORIZED');
+ *   }
+ *   
+ *   if (!req.user.hasPermission('read')) {
+ *     return ResponseUtil.send(req, res, 'FORBIDDEN');
+ *   }
+ *   
+ *   const data = await fetchProtectedData();
+ *   ResponseUtil.send(req, res, 'SUCCESS', { data });
+ * });
+ * ```
+ */
 ResponseUtil.send = (req, res, code, data = {}) => {
   if (res.headersSent) return;
   if (!code)

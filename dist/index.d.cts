@@ -121,7 +121,7 @@ declare class AuthMiddleware {
     static authenticateJWT({ userAuth, roleAuth, scopeAuth, }: AuthMiddlewareOptions): ((req: AuthenticatedRequest, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>) | ((req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>) | ((req: Request, res: Response, next: NextFunction) => void);
     static authenticatePassport(strategy: string, options?: any, callback?: (...args: any[]) => any): any;
     static authenticateUser(options: AuthenticateUserOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>;
-    static authorizeRole({ allowedRoles, checkAll, }: AuthorizeRoleOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+    static authorizeRole({ allowedRoles, checkAll, }: AuthorizeRoleOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>;
     static authorizeScope({ requiredScopes, checkAll, }: AuthorizeScopeOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>;
     static extractToken({ req, headerKey, usingBearer, }: {
         req: Request;
@@ -263,6 +263,22 @@ declare module "express-serve-static-core" {
     }
 }
 
+interface OpenAPIConfig {
+    enabled?: boolean;
+    output?: string;
+    ui?: string | false;
+    info?: {
+        title: string;
+        version: string;
+        description?: string;
+    };
+    servers?: Array<{
+        url: string;
+        description?: string;
+    }>;
+    security?: any[];
+}
+
 declare class ExpressPack {
     #private;
     static init({ app, config, }: {
@@ -271,8 +287,9 @@ declare class ExpressPack {
     }): Promise<Application>;
     static getApp(): Application;
     static getRouter(): Router;
-    static initRoutes({ routes }: {
+    static initRoutes({ routes, openapi }: {
         routes?: RouteGroup[];
+        openapi?: OpenAPIConfig;
     }): void;
     static isInitialized(): boolean;
 }

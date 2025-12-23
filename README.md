@@ -6,6 +6,7 @@
 [![npm version](https://img.shields.io/npm/v/express-pack.svg)](https://www.npmjs.com/package/express-pack)
 [![License](https://img.shields.io/npm/l/express-pack.svg)](https://github.com/your-repo/express-pack/blob/main/LICENSE)
 [![Downloads](https://img.shields.io/npm/dw/express-pack)](https://www.npmjs.com/package/express-pack)
+[![Documentation](https://img.shields.io/badge/docs-typedoc-blue)](https://muthu-kumar369.github.io/express-pack/)
 
 `express-pack`is a modular and scalable utility library built to enhance and simplify Express.js backend development. It provides ready-to-use features such as multi-tenant handling, request validation, authentication, authorization, scoped queries, job scheduling, caching, and messaging integrations — all implemented with clean design patterns and developer flexibility in mind.
 
@@ -17,25 +18,35 @@ It’s designed to reduce boilerplate code and bring enterprise-grade patterns (
 
 1. [🚀 Key Features](#-key-features)
 2. [📦 Installation](#-installation)
-3. [📂 Project Structure & Usage](#-project-structure--usage)
-4. [⚙️ Configuration](#-configuration)
+3. [🔄 Migration Guide (v1 → v2)](#-migration-guide-v1--v2)
+4. [🎯 Quick Start](#-quick-start)
+5. [📂 Project Structure & Usage](#-project-structure--usage)
+6. [⚙️ Configuration](#-configuration)
 
    - [App Configuration](#1️⃣-app-configuration-appconfigjs)
    - [Route Configuration](#2️⃣-route-configuration-routeconfigjs)
    - [Message Configuration](#3️⃣-message-configuration-messageconfigjs)
    - [Locale Configuration](#4️⃣-locale-configuration-localeenconfigjs)
 
-5. [🟢 Initialization & Usage](#-initialization--usage)
-6. [🛠 Third-Party Integrations](#-third-party-integrations)
+7. [🟢 Initialization & Usage](#-initialization--usage)
+8. [🔷 TypeScript Support](#-typescript-support)
+9. [🛠 Third-Party Integrations](#-third-party-integrations)
 
    - [Redis Client](#1-redis-client)
    - [RabbitMQ Service](#2-rabbitmq-service)
    - [Cron Manager](#3-cron-manager)
 
-7. [🛠 Using in Routes](#-using-express-pack-in-routes)
-8. [📝 Mongoose Schema & Plugins](#-mongoose-schema--plugins)
-9. [Using ResponseUtil for Consistent API Response](#-using-responseutil-for-consistent-api-responses)
-10. [🛠 Utilities](#-utilities)
+10. [🛠 Using in Routes](#-using-express-pack-in-routes)
+11. [📝 Mongoose Schema & Plugins](#-mongoose-schema--plugins)
+12. [📤 API Responses](#-using-responseutil-for-consistent-api-responses)
+13. [🔷 TypeScript Support](#-typescript-support)
+14. [📖 OpenAPI/Swagger Integration](#-openapiswagger-integration)
+15. [🧰 Utilities](#-utilities)
+16. [⚡ Performance Optimization](#-performance-optimization)
+17. [✅ Best Practices & Anti-Patterns](#-best-practices--anti-patterns)
+18. [🔧 Troubleshooting](#-troubleshooting)
+19. [📚 Examples](#-examples)
+20. [🤝 Acknowledgments](#-acknowledgments)
 
 ---
 
@@ -131,6 +142,114 @@ npm install express-pack
 yarn add express-pack
 ```
 
+---
+
+## 🔄 Migration Guide (v1 → v2)
+
+Upgrading from v1.x to v2.0.0? We've got you covered!
+
+v2.0.0 is a major rewrite with full TypeScript support, ESM modules, and improved APIs. While there are breaking changes, migration is straightforward.
+
+### Quick Migration
+
+```bash
+# 1. Update package.json
+npm install express-pack@^2.0.0 express@^4.0.0
+
+# 2. Use automated migration tool
+node node_modules/express-pack/scripts/migrate-v1-to-v2.js
+
+# 3. Follow the prompts and test your app
+npm test
+```
+
+### Key Changes
+
+- ✅ **ESM Modules** - Use `import` instead of `require`
+- ✅ **Async Init** - `await ExpressPack.init({ app, config })`
+- ✅ **TypeScript** - Full type safety (optional)
+- ✅ **Object Parameters** - Better API design
+
+### Full Migration Guide
+
+📖 **[Read the complete migration guide](./MIGRATION.md)** for:
+- Detailed breaking changes
+- Step-by-step instructions
+- Common issues & solutions
+- Rollback procedures
+
+---
+
+## 🎯 Quick Start
+
+Get up and running with **express-pack** in under 5 minutes.
+
+### **1. Install Dependencies**
+
+```bash
+npm install express-pack express
+```
+
+### **2. Create Your App**
+
+Create a `src/app.ts` file:
+
+```typescript
+import { ExpressPack, ErrorHandler, type MiddlewareConfig } from 'express-pack';
+import express, { type Application } from 'express';
+
+// Define middleware configuration with type safety
+const config: MiddlewareConfig = {
+  cors: { origin: '*' },
+  bodyParser: { json: { limit: '10mb' } },
+  logger: { level: 'info' },
+};
+
+// Initialize Express app
+const app: Application = express();
+
+// Initialize express-pack
+await ExpressPack.init({ app, config });
+
+// Add a health check route
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Add global error handlers
+app.use(ErrorHandler.handleGlobalError);
+app.use(ErrorHandler.handleNotFoundRoute);
+
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
+```
+
+### **3. Run Your App**
+
+```bash
+npx tsx src/app.ts
+```
+
+### **4. Test It**
+
+```bash
+curl http://localhost:3000/health
+# Response: {"status":"ok","timestamp":"2025-12-23T03:08:06.000Z"}
+```
+
+🎉 **That's it!** You now have a fully configured Express app with CORS, body parsing, logging, and error handling.
+
+**Next Steps:**
+- Add [routes and validation](#-using-express-pack-in-routes)
+- Configure [database connections](#-mongoose-schema--plugins)
+- Set up [Redis caching](#1-redis-client)
+- Explore [TypeScript support](#-typescript-support)
+
+---
+
 # 📂 Project Structure & Usage
 
 ## Project Structure
@@ -174,19 +293,37 @@ project-root/
 
 All application configuration is centralized under `src/config/`.
 
-### 1️⃣ App Configuration (`appConfig.js`)
+### 1️⃣ App Configuration (`appConfig.ts`)
 
 Controls app-level settings like CORS, logger, security, compression, and rate limiting.
 
-```javascript
-const appConfig = {
+```typescript
+import type { MiddlewareConfig } from 'express-pack';
+
+const appConfig: MiddlewareConfig = {
   env: "development",
-  cors: {},
-  logger: {},
-  bodyParser: {},
-  security: {},
-  compression: {},
-  "express-rate-limit": {}, // renamed for clarity
+  cors: {
+    origin: '*',
+    credentials: true,
+  },
+  logger: {
+    level: 'info',
+  },
+  bodyParser: {
+    json: { limit: '10mb' },
+    urlencoded: { extended: true },
+  },
+  security: {
+    hsts: { maxAge: 31536000 },
+  },
+  compression: {
+    level: 6,
+    threshold: 1024,
+  },
+  'express-rate-limit': {
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+  },
 };
 
 export default appConfig;
@@ -194,26 +331,31 @@ export default appConfig;
 
 ---
 
-### 2️⃣ Route Configuration (`routeConfig.js`)
+### 2️⃣ Route Configuration (`routeConfig.ts`)
 
 Defines API routes, prefixes, and versions. Each route references its corresponding module router.
 
-```javascript
-import addressRouter from "../modules/user/address/router/address.router.js";
-import cartRouter from "../modules/user/cart/router/cart.router.js";
-import notificationRouter from "../modules/user/notification/router/notification.router.js";
-import userRouter from "../modules/user/user/router/user.router.js";
+```typescript
+import type { RouteGroup } from 'express-pack';
+import addressRouter from '../modules/user/address/router/address.router';
+import cartRouter from '../modules/user/cart/router/cart.router';
+import notificationRouter from '../modules/user/notification/router/notification.router';
+import userRouter from '../modules/user/user/router/user.router';
 
-const routeConfig = {
+interface RouteConfig {
+  routes: RouteGroup[];
+}
+
+const routeConfig: RouteConfig = {
   routes: [
     {
-      prefix: "/api",
-      version: "/v1",
+      prefix: '/api',
+      version: '/v1',
       route: [
-        { path: "/address", route: addressRouter },
-        { path: "/cart", route: cartRouter },
-        { path: "/notification", route: notificationRouter },
-        { path: "/user", route: userRouter },
+        { path: '/address', route: addressRouter },
+        { path: '/cart', route: cartRouter },
+        { path: '/notification', route: notificationRouter },
+        { path: '/user', route: userRouter },
       ],
     },
   ],
@@ -224,79 +366,109 @@ export default routeConfig;
 
 ---
 
-### 3️⃣ Message Configuration (`messageConfig.js`)
+### 3️⃣ Message Configuration (`messageConfig.ts`)
 
 Standardized messages for API responses.
 
-```javascript
-export default {
+```typescript
+interface MessageConfig {
+  http_code: number;
+  code: string;
+  success: boolean;
+}
+
+interface Messages {
+  [key: string]: MessageConfig;
+}
+
+const messageConfig: Messages = {
   INTERNAL_SERVER_ERROR: {
     http_code: 500,
-    code: "INTERNAL_SERVER_ERROR",
+    code: 'INTERNAL_SERVER_ERROR',
     success: false,
   },
-  DATA_NOT_FOUND: { http_code: 400, code: "DATA_NOT_FOUND", success: false },
-  SUCCESS: { http_code: 200, code: "SUCCESS", success: true },
+  DATA_NOT_FOUND: {
+    http_code: 400,
+    code: 'DATA_NOT_FOUND',
+    success: false,
+  },
+  SUCCESS: {
+    http_code: 200,
+    code: 'SUCCESS',
+    success: true,
+  },
   PASSWORD_MISMATCH: {
     http_code: 400,
-    code: "PASSWORD_MISMATCH",
+    code: 'PASSWORD_MISMATCH',
     success: false,
   },
   USER_ALREADY_EXIST: {
+    http_code: 400,
+    code: 'USER_ALREADY_EXIST',
+    success: false,
+  },
+  REGISTER_SUCCESS: {
     http_code: 200,
-    code: "USER_ALREADY_EXIST",
+    code: 'REGISTER_SUCCESS',
     success: true,
   },
-  REGISTER_SUCCESS: { http_code: 200, code: "REGISTER_SUCCESS", success: true },
 };
+
+export default messageConfig;
 ```
 
 ---
 
-### 4️⃣ Locale Configuration (`localeEnConfig.js`)
+### 4️⃣ Locale Configuration (`localeEnConfig.ts`)
 
 English translation strings.
 
-```javascript
-export default {
-  INTERNAL_SERVER_ERROR: "Internal server error",
-  DATA_NOT_FOUND: "Data not found",
-  SUCCESS: "Request successful",
-  PASSWORD_MISMATCH: "Password is incorrect",
-  USER_ALREADY_EXIST: "User already exists",
-  REGISTER_SUCCESS: "User registered successfully",
+```typescript
+interface LocaleTranslations {
+  [key: string]: string;
+}
+
+const localeEnConfig: LocaleTranslations = {
+  INTERNAL_SERVER_ERROR: 'Internal server error',
+  DATA_NOT_FOUND: 'Data not found',
+  SUCCESS: 'Request successful',
+  PASSWORD_MISMATCH: 'Password is incorrect',
+  USER_ALREADY_EXIST: 'User already exists',
+  REGISTER_SUCCESS: 'User registered successfully',
 };
+
+export default localeEnConfig;
 ```
 
 ---
 
 ## 🟢 Initialization & Usage
 
-All initialization is centralized in `src/loaders/index.js` for modular setup.
+All initialization is centralized in `src/loaders/index.ts` for modular setup.
 
-```javascript
-import { ExpressPack, ErrorHandler, i18n, Mongoose } from "express-pack";
-import express from "express";
+```typescript
+import { ExpressPack, ErrorHandler, i18n, Mongoose } from 'express-pack';
+import express, { type Application } from 'express';
 
-import appConfig from "../config/appConfig.js";
-import routesConfig from "../config/routeConfig.js";
-import messageConfig from "../config/messages/messageConfig.js";
-import localeEnConfig from "../config/locale/en/localeEnConfig.js";
+import appConfig from '../config/appConfig';
+import routesConfig from '../config/routeConfig';
+import messageConfig from '../config/messages/messageConfig';
+import localeEnConfig from '../config/locale/en/localeEnConfig';
 
-import RedisService from "../services/redis/index.js";
-import RabbitMQService from "../services/queue/rabbitmq.js";
-import CronService from "../services/cron/index.js";
+import RedisService from '../services/redis';
+import RabbitMQService from '../services/queue/rabbitmq';
+import CronService from '../services/cron';
 
-export const initializeApp = async () => {
+export const initializeApp = async (): Promise<Application> => {
   // Handle uncaught exceptions and unhandled rejections
   ErrorHandler.handleProcessError();
 
   // Initialize ExpressPack
-  ExpressPack.init({ app: express(), config: appConfig });
-  const app = ExpressPack.getApp();
+  const app: Application = express();
+  await ExpressPack.init({ app, config: appConfig });
 
   // Initialize database
-  Mongoose.init({ uri: process.env.DB_URL });
+  await Mongoose.init({ uri: process.env.DB_URL! });
 
   // Initialize external services
   await RedisService();
@@ -322,10 +494,10 @@ export const initializeApp = async () => {
 
 ---
 
-### `index.js` Example
+### `index.ts` Example
 
-```javascript
-import { initializeApp } from "./src/loaders/index.js";
+```typescript
+import { initializeApp } from './src/loaders';
 
 const PORT = process.env.PORT || 3000;
 
@@ -339,7 +511,261 @@ const PORT = process.env.PORT || 3000;
 
 ---
 
-## 📌 Configuration Options
+## 🔷 TypeScript Support
+
+**express-pack** is built with **TypeScript-first** design, providing comprehensive type definitions for all features.
+
+### **Type Exports Reference**
+
+All types are exported from the main package:
+
+```typescript
+import type {
+  // Configuration Types
+  MiddlewareConfig,
+  RouteGroup,
+  RouteDefinition,
+  
+  // Authentication Types
+  AuthConfig,
+  JWTPayload,
+  
+  // Validation Types
+  ValidationSchema,
+  
+  // Response Types
+  ResponseFormat,
+  ApiResponse,
+  
+  // Mongoose Plugin Types
+  ModelBuildConfig,
+  PluginConfig,
+  PaginateOptions,
+  PaginateResult,
+  
+  // Service Types
+  RedisConfig,
+  RabbitMQConfig,
+  CronConfig,
+  
+  // Utility Types
+  DateInput,
+  TimeUnit,
+  DurationUnit,
+  AnyObject,
+} from 'express-pack';
+```
+
+### **Generic Type Usage**
+
+Many utilities support generic types for type-safe operations:
+
+```typescript
+import { RabbitMQService, type MessageHandler } from 'express-pack';
+
+// Type-safe message handler
+interface OrderMessage {
+  orderId: string;
+  userId: string;
+  amount: number;
+}
+
+const handleOrder: MessageHandler<OrderMessage> = async (msg) => {
+  // msg is typed as OrderMessage
+  console.log(`Processing order ${msg.orderId} for user ${msg.userId}`);
+};
+
+await RabbitMQService.consume<OrderMessage>('orders', handleOrder);
+```
+
+### **Type-Safe Configuration**
+
+Use type definitions for compile-time configuration validation:
+
+```typescript
+import type { MiddlewareConfig, RouteGroup } from 'express-pack';
+
+// Type-safe middleware config
+const config: MiddlewareConfig = {
+  cors: {
+    origin: process.env.CORS_ORIGIN || '*',
+    credentials: true,
+    // TypeScript will error if you add invalid properties
+  },
+  bodyParser: {
+    json: { limit: '10mb' },
+    urlencoded: { extended: true },
+  },
+  logger: {
+    level: 'info', // Type-safe: only valid log levels allowed
+  },
+};
+
+// Type-safe route configuration
+const routes: RouteGroup[] = [
+  {
+    prefix: '/api',
+    version: '/v1',
+    route: [
+      { path: '/users', route: userRouter },
+      // TypeScript ensures correct structure
+    ],
+  },
+];
+```
+
+### **Custom Type Extensions**
+
+Extend Express types to include custom properties:
+
+```typescript
+import type { Request } from 'express';
+
+// Extend Express Request interface
+declare module 'express' {
+  interface Request {
+    user?: {
+      id: string;
+      email: string;
+      role: 'user' | 'admin' | 'seller';
+    };
+    tenant?: {
+      id: string;
+      name: string;
+    };
+    requestId?: string;
+  }
+}
+
+// Now you can use these properties with full type safety
+import { AsyncRouteWrapper } from 'express-pack';
+
+const getProfile = AsyncRouteWrapper.asyncHandler(async (req, res) => {
+  // req.user is fully typed
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  const userId: string = req.user.id; // Type-safe access
+  const userRole: 'user' | 'admin' | 'seller' = req.user.role;
+  
+  res.json({ userId, userRole });
+});
+```
+
+### **Type Inference Examples**
+
+TypeScript automatically infers types in many scenarios:
+
+```typescript
+import { ModelBuilder, z } from 'express-pack';
+
+// Define schema with type inference
+const userSchema = {
+  name: { type: String, required: true },
+  email: { type: String, required: true },
+  age: { type: Number },
+  role: { type: String, enum: ['user', 'admin'] },
+};
+
+// Build model - TypeScript infers the document type
+const User = ModelBuilder.build({
+  name: 'user',
+  schemaDefinition: userSchema,
+  plugins: {
+    timestamps: true,
+    softDelete: true,
+  },
+});
+
+// Type inference in queries
+const user = await User.findOne({ email: 'test@example.com' });
+// user is automatically typed with name, email, age, role, createdAt, updatedAt
+
+// Type-safe validation with Zod
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+type LoginInput = z.infer<typeof loginSchema>; // Inferred type
+// LoginInput = { email: string; password: string; }
+```
+
+### **Common TypeScript Errors & Solutions**
+
+#### **Error: Type 'undefined' is not assignable to type 'string'**
+
+**Cause:** Accessing environment variables without null checking.
+
+**Solution:**
+```typescript
+// ❌ Wrong
+const dbUrl: string = process.env.DB_URL;
+
+// ✅ Correct - Option 1: Non-null assertion (if you're sure it exists)
+const dbUrl: string = process.env.DB_URL!;
+
+// ✅ Correct - Option 2: Provide default
+const dbUrl: string = process.env.DB_URL || 'mongodb://localhost:27017/db';
+
+// ✅ Correct - Option 3: Runtime validation
+if (!process.env.DB_URL) {
+  throw new Error('DB_URL environment variable is required');
+}
+const dbUrl: string = process.env.DB_URL;
+```
+
+#### **Error: Property 'user' does not exist on type 'Request'**
+
+**Cause:** Custom properties not declared in Express types.
+
+**Solution:**
+```typescript
+// Add type declaration (see Custom Type Extensions above)
+declare module 'express' {
+  interface Request {
+    user?: User;
+  }
+}
+```
+
+#### **Error: Argument of type 'X' is not assignable to parameter of type 'Y'**
+
+**Cause:** Type mismatch in function calls.
+
+**Solution:**
+```typescript
+import type { MiddlewareConfig } from 'express-pack';
+
+// ❌ Wrong - missing type annotation
+const config = {
+  cors: { origin: '*' },
+};
+
+// ✅ Correct - explicit type
+const config: MiddlewareConfig = {
+  cors: { origin: '*' },
+};
+```
+
+#### **Error: Cannot find module 'express-pack' or its corresponding type declarations**
+
+**Cause:** Package not installed or types not recognized.
+
+**Solution:**
+```bash
+# Reinstall package
+npm install express-pack
+
+# Clear TypeScript cache
+rm -rf node_modules/.cache
+npx tsc --build --clean
+```
+
+---
+
+# 📌 Configuration Options
 
 ### **Body Parser Configuration**
 
@@ -354,11 +780,15 @@ Handles request body parsing.
 
 **Example Usage:**
 
-```javascript
-bodyParser: {
-  json: { limit: "1mb" },
-  urlencoded: { extended: true, limit: "500kb" },
-},
+```typescript
+import type { MiddlewareConfig } from 'express-pack';
+
+const config: MiddlewareConfig = {
+  bodyParser: {
+    json: { limit: '1mb' },
+    urlencoded: { extended: true, limit: '500kb' },
+  },
+};
 ```
 
 ---
@@ -378,11 +808,15 @@ Manages cross-origin resource sharing.
 
 **Example Usage:**
 
-```javascript
-cors: {
-  methods: ["GET", "POST"],
-  credentials: true,
-},
+```typescript
+import type { MiddlewareConfig } from 'express-pack';
+
+const config: MiddlewareConfig = {
+  cors: {
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+};
 ```
 
 ---
@@ -400,11 +834,16 @@ Handles application logging using Winston.
 
 **Example Usage:**
 
-```javascript
-logger: {
-  level: "debug",
-  transports: [new transports.Console()],
-},
+```typescript
+import type { MiddlewareConfig } from 'express-pack';
+import { transports } from 'winston';
+
+const config: MiddlewareConfig = {
+  logger: {
+    level: 'debug',
+    transports: [new transports.Console()],
+  },
+};
 ```
 
 ---
@@ -424,11 +863,15 @@ Enhances security with Helmet.js settings.
 
 **Example Usage:**
 
-```javascript
-security: {
-  hsts: { maxAge: 31536000 },
-  xssFilter: false,
-},
+```typescript
+import type { MiddlewareConfig } from 'express-pack';
+
+const config: MiddlewareConfig = {
+  security: {
+    hsts: { maxAge: 31536000 },
+    xssFilter: false,
+  },
+};
 ```
 
 ### **Compression Configuration**
@@ -443,17 +886,23 @@ Optimizes server performance by compressing HTTP responses.
 
 **Example Usage:**
 
-```javascript
-compression: {
-  level: 9,
-  threshold: 2048,
-  filter: (req, res) => {
-    if (req.headers["x-no-compression"]) {
-      return false; // Skip compression if client requests no compression
-    }
-    return compression.filter(req, res); // Default compression filter
+```typescript
+import type { MiddlewareConfig } from 'express-pack';
+import type { Request, Response } from 'express';
+import compression from 'compression';
+
+const config: MiddlewareConfig = {
+  compression: {
+    level: 9,
+    threshold: 2048,
+    filter: (req: Request, res: Response) => {
+      if (req.headers['x-no-compression']) {
+        return false; // Skip compression if client requests no compression
+      }
+      return compression.filter(req, res); // Default compression filter
+    },
   },
-},
+};
 ```
 
 ### **Express Rate Limit Configuration**
@@ -472,14 +921,18 @@ Controls request rate limiting to prevent abuse or excessive requests.
 
 **Example Usage:**
 
-```javascript
-"express-rate-limit": {
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50,                   // limit each IP to 50 requests per window
-  message: "Too many requests from this IP, please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
-},
+```typescript
+import type { MiddlewareConfig } from 'express-pack';
+
+const config: MiddlewareConfig = {
+  'express-rate-limit': {
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 50,                   // limit each IP to 50 requests per window
+    message: 'Too many requests from this IP, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+  },
+};
 ```
 
 # **🛠 Third-Party Integrations**
@@ -492,16 +945,18 @@ Controls request rate limiting to prevent abuse or excessive requests.
 
 ### **⚡ Initialization / Connection**
 
-```javascript
-import { RedisClientService } from "express-pack";
+```typescript
+import { RedisClientService, type RedisConfig } from 'express-pack';
 
-const ConnectRedis = () => {
-  RedisClientService.enableRedis(true, {
-    REDIS_HOST: "127.0.0.1",
+const ConnectRedis = (): void => {
+  const config: RedisConfig = {
+    REDIS_HOST: '127.0.0.1',
     REDIS_PORT: 6379,
-    REDIS_PASSWORD: "yourpassword",
+    REDIS_PASSWORD: 'yourpassword',
     REDIS_DB: 0,
-  });
+  };
+  
+  RedisClientService.enableRedis(true, config);
 };
 
 export default ConnectRedis;
@@ -509,22 +964,24 @@ export default ConnectRedis;
 
 ### **🚀 Usage Examples**
 
-```javascript
+```typescript
+import { RedisClientService } from 'express-pack';
+
 // 💾 Set key with optional expiration
-await RedisClientService.set("key1", "value1");
-await RedisClientService.set("key2", "value2", { expire: 60 }); // expires in 60 sec
+await RedisClientService.set('key1', 'value1');
+await RedisClientService.set('key2', 'value2', { expire: 60 }); // expires in 60 sec
 
 // 🔍 Get key
-const value = await RedisClientService.get("key1");
+const value: string | null = await RedisClientService.get('key1');
 
 // ❌ Delete key
-await RedisClientService.del("key2");
+await RedisClientService.del('key2');
 
 // ⏳ Set expiration
-await RedisClientService.expire("key1", 120); // expire in 120 sec
+await RedisClientService.expire('key1', 120); // expire in 120 sec
 
 // 🗂 List keys
-const keys = await RedisClientService.keys("*");
+const keys: string[] = await RedisClientService.keys('*');
 
 // 🧩 Get Redis client instance
 const client = RedisClientService.getClient();
@@ -536,16 +993,20 @@ const client = RedisClientService.getClient();
 
 ### **⚡ Initialization / Connection**
 
-```javascript
-import { RabbitMQService } from "express-pack";
+```typescript
+import { RabbitMQService, type RabbitMQConfig } from 'express-pack';
 
-const ConnectRabbitMQ = async () => {
-  const config = {
+const ConnectRabbitMQ = async (): Promise<void> => {
+  const config: RabbitMQConfig = {
     enabled: true,
-    uri: "amqp://user:password@localhost:5672",
+    uri: 'amqp://user:password@localhost:5672',
     prefetch: 5,
-    exchanges: [{ name: "logs", type: "fanout" }],
-    queues: [{ name: "task_queue", options: { durable: true } }],
+    exchanges: [
+      { name: 'logs', type: 'fanout' },
+    ],
+    queues: [
+      { name: 'task_queue', options: { durable: true } },
+    ],
   };
 
   await RabbitMQService.init(config);
@@ -556,19 +1017,30 @@ export default ConnectRabbitMQ;
 
 ### **🚀 Usage Examples**
 
-```javascript
+```typescript
+import { RabbitMQService, type MessageHandler } from 'express-pack';
+
+interface TaskMessage {
+  task: string;
+  data?: any;
+}
+
 // 📤 Publish to exchange
-await RabbitMQService.publishToExchange("logs", "", { message: "Hello" });
+await RabbitMQService.publishToExchange('logs', '', { message: 'Hello' });
 
 // 📥 Publish to queue
-await RabbitMQService.publishToQueue("task_queue", { task: "send_email" });
+const taskMessage: TaskMessage = { task: 'send_email', data: { to: 'user@example.com' } };
+await RabbitMQService.publishToQueue('task_queue', taskMessage);
 
-// 🎧 Consume messages from a queue
-await RabbitMQService.consume(
-  "task_queue",
-  async (msg) => {
-    console.log("Received message:", msg);
-  },
+// 🎧 Consume messages from a queue with type safety
+const handleTask: MessageHandler<TaskMessage> = async (msg) => {
+  console.log('Received task:', msg.task);
+  // Process task...
+};
+
+await RabbitMQService.consume<TaskMessage>(
+  'task_queue',
+  handleTask,
   {
     retryAttempts: 3,
     retryDelayMs: 1000,
@@ -585,18 +1057,22 @@ const channel = RabbitMQService.getChannel();
 
 ### **⚡ Initialization / Connection**
 
-```javascript
-import { CronManager, RedisClientService } from "express-pack";
+```typescript
+import { CronManager, RedisClientService, type CronConfig } from 'express-pack';
+import type { Redis } from 'ioredis';
 
-const InitCronManager = () => {
-  const cron = new CronManager({
-    serviceName: "my-service",
-    redis: RedisClientService.getClient(),
+const InitCronManager = (): CronManager => {
+  const redisClient: Redis = RedisClientService.getClient();
+  
+  const config: CronConfig = {
+    serviceName: 'my-service',
+    redis: redisClient,
     persistent: true,
-    timezone: "Asia/Kolkata",
-    persistService: "redis", // or "mongodb"
-  });
-
+    timezone: 'Asia/Kolkata',
+    persistService: 'redis', // or 'mongodb'
+  };
+  
+  const cron = new CronManager(config);
   return cron;
 };
 
@@ -605,35 +1081,49 @@ export default InitCronManager;
 
 ### **🚀 Usage Examples**
 
-```javascript
+```typescript
+import type { CronJobConfig } from 'express-pack';
+
 const cron = InitCronManager();
 
+interface JobPayload {
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  data?: any;
+}
+
 // 🆕 Register a cron job
+const jobConfig: JobPayload = {
+  url: 'https://jsonplaceholder.typicode.com/todos/1',
+  method: 'GET',
+};
+
 cron.registerJob(
-  "test-job",
-  "*/1 * * * *", // every 1 minute
-  { url: "https://jsonplaceholder.typicode.com/todos/1", method: "GET" },
+  'test-job',
+  '*/1 * * * *', // every 1 minute
+  jobConfig,
   { runOnInit: true, retry: 2 }
 );
 
 // ⏸ Pause a job
-cron.pauseJob("test-job");
+cron.pauseJob('test-job');
 
 // ▶️ Resume a job
-cron.resumeJob("test-job");
+cron.resumeJob('test-job');
 
 // 🛑 Stop a job
-cron.stopJob("test-job");
+cron.stopJob('test-job');
 
 // ❌ Remove a job
-await cron.removeJob("test-job");
+await cron.removeJob('test-job');
 
 // 📄 List all registered jobs
-console.log(cron.listJobs());
+const jobs = cron.listJobs();
+console.log(jobs);
 
 // 🔍 Track job state manually
-await cron.getJobState("test-job");
-await cron.trackJobState("test-job", "running");
+const state = await cron.getJobState('test-job');
+await cron.trackJobState('test-job', 'running');
 ```
 
 ---
@@ -658,29 +1148,29 @@ await cron.trackJobState("test-job", "running");
 
 We recommend separating route-specific configurations (validation and auth) from the router file to keep it clean:
 
-```javascript
-// src/routes/user.router.js
+```typescript
+// src/routes/user.router.ts
 import {
   ExpressPack,
   RequestValidator,
   AuthMiddleware,
   AsyncRouteWrapper,
-} from "express-pack";
-import express from "express";
+} from 'express-pack';
+import type { Router } from 'express';
 
 import {
   login,
   register,
   userDelete,
   userProfileDetails,
-} from "../controller/user.controller.js";
+} from '../controller/user.controller';
 
-import UserHelper from "../helper/user.helper.js";
+import UserHelper from '../helper/user.helper';
 
 // Import pre-defined route config
-import { userRoutesConfig } from "../config/routes/userRoutesConfig.js";
+import { userRoutesConfig } from '../config/routes/userRoutesConfig';
 
-const router = ExpressPack.getRouter();
+const router: Router = ExpressPack.getRouter();
 
 // ===============================
 // Routes
@@ -688,28 +1178,28 @@ const router = ExpressPack.getRouter();
 
 // Login route
 router.post(
-  "/login",
+  '/login',
   RequestValidator.validateRequest(userRoutesConfig.login.validation),
   AsyncRouteWrapper.asyncHandler(login)
 );
 
 // Register route
 router.post(
-  "/register",
+  '/register',
   RequestValidator.validateRequest(userRoutesConfig.register.validation),
   AsyncRouteWrapper.asyncHandler(register)
 );
 
 // Profile details
 router.get(
-  "/profile-details",
+  '/profile-details',
   AuthMiddleware.authenticateUser(userRoutesConfig.profile.auth),
   AsyncRouteWrapper.asyncHandler(userProfileDetails)
 );
 
 // Delete user by ID
 router.delete(
-  "/:user_id",
+  '/:user_id',
   AuthMiddleware.authenticateUser(userRoutesConfig.delete.auth),
   RequestValidator.validateRequest(userRoutesConfig.delete.validation),
   AsyncRouteWrapper.asyncHandler(userDelete)
@@ -724,12 +1214,25 @@ export default router;
 
 Keep all validation and auth configurations in a separate file:
 
-```javascript
-// src/config/routes/userRoutesConfig.js
-import { z } from "zod";
-import UserHelper from "../../helper/user.helper.js";
+```typescript
+// src/config/routes/userRoutesConfig.ts
+import { z } from 'zod';
+import type { AuthConfig, ValidationSchema } from 'express-pack';
+import UserHelper from '../../helper/user.helper';
 
-export const userRoutesConfig = {
+interface RouteConfig {
+  validation?: ValidationSchema;
+  auth?: AuthConfig;
+}
+
+interface UserRoutesConfig {
+  login: RouteConfig;
+  register: RouteConfig;
+  profile: RouteConfig;
+  delete: RouteConfig;
+}
+
+export const userRoutesConfig: UserRoutesConfig = {
   login: {
     validation: {
       body: z.object({
@@ -749,16 +1252,16 @@ export const userRoutesConfig = {
   },
   profile: {
     auth: {
-      secret: process.env.JWT_SECRET,
-      headerKey: "authorization",
+      secret: process.env.JWT_SECRET!,
+      headerKey: 'authorization',
       usingBearer: true,
       callback: UserHelper.getUser,
     },
   },
   delete: {
     auth: {
-      secret: process.env.JWT_SECRET,
-      headerKey: "authorization",
+      secret: process.env.JWT_SECRET!,
+      headerKey: 'authorization',
       usingBearer: true,
       callback: UserHelper.getUser,
     },
@@ -780,11 +1283,20 @@ export const userRoutesConfig = {
 
 `RequestValidator.validateRequest` automatically validates `params`, `query`, and `body` using Zod schemas:
 
-```javascript
+```typescript
+import { RequestValidator, z } from 'express-pack';
+
 RequestValidator.validateRequest({
-  body: z.object({ email: z.string().email(), password: z.string().min(6) }),
-  params: z.object({ user_id: z.string().uuid() }),
-  query: z.object({ force: z.boolean().optional() }),
+  body: z.object({
+    email: z.string().email(),
+    password: z.string().min(6),
+  }),
+  params: z.object({
+    user_id: z.string().uuid(),
+  }),
+  query: z.object({
+    force: z.boolean().optional(),
+  }),
 });
 ```
 
@@ -800,8 +1312,12 @@ RequestValidator.validateRequest({
 
 Wrap your async controllers with `AsyncRouteWrapper` to automatically forward errors to Express error handlers:
 
-```javascript
-AsyncRouteWrapper.asyncHandler(async (req, res) => {
+```typescript
+import { AsyncRouteWrapper } from 'express-pack';
+import type { Request, Response } from 'express';
+import UserHelper from '../helper/user.helper';
+
+AsyncRouteWrapper.asyncHandler(async (req: Request, res: Response) => {
   const user = await UserHelper.getUser(req);
   res.json({ data: user });
 });
@@ -813,13 +1329,19 @@ AsyncRouteWrapper.asyncHandler(async (req, res) => {
 
 Authenticate routes easily using `AuthMiddleware.authenticateUser`:
 
-```javascript
-AuthMiddleware.authenticateUser({
-  secret: process.env.JWT_SECRET,
-  headerKey: "authorization",
+```typescript
+import { AuthMiddleware } from 'express-pack';
+import type { AuthConfig } from 'express-pack';
+import UserHelper from '../helper/user.helper';
+
+const authConfig: AuthConfig = {
+  secret: process.env.JWT_SECRET!,
+  headerKey: 'authorization',
   usingBearer: true,
   callback: UserHelper.getUser, // returns user object -> attached to req.user
-});
+};
+
+AuthMiddleware.authenticateUser(authConfig);
 ```
 
 - If valid, attaches user to `req.user`
@@ -855,19 +1377,38 @@ AuthMiddleware.authenticateUser({
 
 ## **1️⃣ Define Schema & Build Model**
 
-```javascript
-import { ModelBuilder, z } from "express-pack";
+```typescript
+import { ModelBuilder, z, type ModelBuildConfig, type SchemaDefinition } from 'express-pack';
+import type { Schema } from 'mongoose';
 
-// 🔹 Define schema fields
-const userSchema = {
+// 🔹 Define schema fields with TypeScript interface
+interface UserSchemaFields {
+  org_id: string;
+  name: string;
+  email: string;
+  password?: string;
+  userRole: 'user' | 'seller' | 'admin';
+  token?: string;
+  lastLogin?: Date;
+  currentOrder: number;
+  returnedCount: number;
+  shopName?: string;
+  shopMobileNumber?: string;
+  shopAddress?: string;
+  isDeleted?: boolean;
+  deletedAt?: Date;
+}
+
+// 🔹 Define schema definition
+const userSchema: SchemaDefinition = {
   org_id: { type: String, required: true }, // Tenant ID
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String },
   userRole: {
     type: String,
-    enum: ["user", "seller", "admin"],
-    default: "user",
+    enum: ['user', 'seller', 'admin'],
+    default: 'user',
   },
   token: { type: String },
   lastLogin: { type: Date },
@@ -882,13 +1423,13 @@ const userSchema = {
 
 // 🔹 Build model with plugins
 const User = ModelBuilder.build({
-  name: "user",
+  name: 'user',
   schemaDefinition: userSchema,
   schemaOptions: {},
 
   plugins: {
     // 🏷 Multi-tenancy
-    multiTenancy: { field: "org_id" },
+    multiTenancy: { field: 'org_id' },
 
     // ⏱ Timestamps
     timestamps: true,
@@ -906,15 +1447,15 @@ const User = ModelBuilder.build({
     pagination: true,
 
     // 🔗 Slug generator
-    slugGenerator: { slugField: "slug", sourceField: "name", unique: true },
+    slugGenerator: { slugField: 'slug', sourceField: 'name', unique: true },
 
     // 📊 Index manager
     indexManager: {
       indexes: [
         {
-          field: "name",
+          field: 'name',
           type: 1,
-          name: "idx_name_asc",
+          name: 'idx_name_asc',
           options: { unique: false },
         },
       ],
@@ -924,19 +1465,19 @@ const User = ModelBuilder.build({
     retryHandler: { retries: 5, delay: 1500 },
 
     // 🔒 Field encryption
-    fieldEncryption: { fields: ["password"] },
+    fieldEncryption: { fields: ['password'] },
 
     // ✅ Unique constraint
     uniqueConstraint: {
-      fields: ["email"],
-      messages: { email: "Email already exists" },
+      fields: ['email'],
+      messages: { email: 'Email already exists' },
     },
 
     // 🧪 Schema validation
     schemaValidation: {
       validate: {
-        email: z.string().email({ message: "Invalid email format" }),
-        age: z.number().min(0, { message: "Age must be non-negative" }),
+        email: z.string().email({ message: 'Invalid email format' }),
+        age: z.number().min(0, { message: 'Age must be non-negative' }),
       },
     },
   },
@@ -951,13 +1492,19 @@ export default User;
 
 ### **⚡ Create / Save**
 
-```javascript
+```typescript
+import type { Document } from 'mongoose';
+
+interface UserDocument extends Document, UserSchemaFields {
+  saveWithRetry(): Promise<this>;
+}
+
 const newUser = new User({
-  org_id: "tenant_123", // required tenant ID
-  name: "Alice",
-  email: "alice@example.com",
-  password: "12345",
-});
+  org_id: 'tenant_123', // required tenant ID
+  name: 'Alice',
+  email: 'alice@example.com',
+  password: '12345',
+}) as UserDocument;
 
 // 🔁 Save with retry
 await newUser.saveWithRetry();
@@ -967,16 +1514,16 @@ await newUser.saveWithRetry();
 
 ### **⚡ Find One**
 
-```javascript
+```typescript
 // Multi-tenancy applied automatically
 const user = await User.findOne({
-  org_id: "tenant_123",
-  email: "alice@example.com",
+  org_id: 'tenant_123',
+  email: 'alice@example.com',
 });
 
 // Skip tenant filter if needed
 const userWithoutTenant = await User.findOne(
-  { email: "alice@example.com" },
+  { email: 'alice@example.com' },
   null,
   { skipTenantCheck: true }
 );
@@ -986,20 +1533,22 @@ const userWithoutTenant = await User.findOne(
 
 ### **⚡ Find / Paginate**
 
-```javascript
+```typescript
+import type { PaginateOptions, PaginateResult } from 'express-pack';
+
 // Paginate users for a tenant
-const paginatedUsers = await User.paginate({
+const paginatedUsers: PaginateResult = await User.paginate({
   page: 1,
   limit: 10,
-  filter: { org_id: "tenant_123", userRole: "user" }, // tenant + filter
+  filter: { org_id: 'tenant_123', userRole: 'user' }, // tenant + filter
   sort: { name: 1 },
 });
 
 // Skip tenant check (use carefully)
-const allUsers = await User.paginate({
+const allUsers: PaginateResult = await User.paginate({
   page: 1,
   limit: 10,
-  filter: { userRole: "user" },
+  filter: { userRole: 'user' },
   skipTenantCheck: true,
 });
 ```
@@ -1008,17 +1557,17 @@ const allUsers = await User.paginate({
 
 ### **⚡ Update**
 
-```javascript
+```typescript
 // Update a user (multi-tenancy applied automatically)
 await User.update(
-  { org_id: "tenant_123", _id: user._id },
-  { userRole: "seller" }
+  { org_id: 'tenant_123', _id: user._id },
+  { userRole: 'seller' }
 );
 
 // Skip tenant check
 await User.update(
   { _id: user._id },
-  { userRole: "admin" },
+  { userRole: 'admin' },
   { skipTenantCheck: true }
 );
 ```
@@ -1027,7 +1576,7 @@ await User.update(
 
 ### **⚡ Soft Delete / Restore**
 
-```javascript
+```typescript
 // Soft delete a document
 await user.softDelete();
 
@@ -1039,12 +1588,12 @@ await user.restore();
 
 ### **⚡ Slug / Versioning / Encryption**
 
-```javascript
+```typescript
 // Slug generated automatically from name
 console.log(user.slug);
 
 // Version increments automatically
-user.name = "Alice Updated";
+user.name = 'Alice Updated';
 await user.saveWithRetry();
 console.log(user.__v); // version number
 
@@ -1056,16 +1605,16 @@ console.log(user.password); // decrypted password
 
 ### **⚡ Unique Constraint / Validation**
 
-```javascript
+```typescript
 try {
   const invalidUser = new User({
-    email: "invalidemail",
-    org_id: "tenant_123",
-    name: "Bob",
+    email: 'invalidemail',
+    org_id: 'tenant_123',
+    name: 'Bob',
   });
   await invalidUser.saveWithRetry();
 } catch (err) {
-  console.error(err.message); // Validation error or unique constraint
+  console.error((err as Error).message); // Validation error or unique constraint
 }
 ```
 
@@ -1091,13 +1640,14 @@ try {
 
 ### **Example Controller**
 
-```javascript
-import User from "../../../../schema/user/user.schema.js";
-import Wishlist from "../../../../schema/wishlist/wishlist.schema.js";
-import { ResponseUtil } from "express-pack";
+```typescript
+import User from '../../../../schema/user/user.schema';
+import Wishlist from '../../../../schema/wishlist/wishlist.schema';
+import { ResponseUtil } from 'express-pack';
+import type { Request, Response } from 'express';
 
 // Example: Login Controller
-export const login = async (req, res) => {
+export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
 
@@ -1106,39 +1656,39 @@ export const login = async (req, res) => {
     });
 
     if (!user) {
-      return ResponseUtil.send(req, res, "DATA_NOT_FOUND");
+      return ResponseUtil.send(req, res, 'DATA_NOT_FOUND');
     }
 
     // Example: password validation & JWT generation skipped
 
-    ResponseUtil.send(req, res, "SUCCESS", {
+    ResponseUtil.send(req, res, 'SUCCESS', {
       id: user._id,
       email: user.email,
       name: user.name,
     });
   } catch (error) {
-    ResponseUtil.send(req, res, "INTERNAL_SERVER_ERROR");
+    ResponseUtil.send(req, res, 'INTERNAL_SERVER_ERROR');
   }
 };
 
 // Example: Register Controller
-export const register = async (req, res) => {
+export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email } = req.body;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return ResponseUtil.send(req, res, "USER_ALREADY_EXIST");
+      return ResponseUtil.send(req, res, 'USER_ALREADY_EXIST');
     }
 
     const newUser = new User({ name, email });
     await newUser.saveWithRetry();
 
-    await Wishlist.create({ name: "General", userId: newUser._id });
+    await Wishlist.create({ name: 'General', userId: newUser._id });
 
-    ResponseUtil.send(req, res, "REGISTER_SUCCESS");
+    ResponseUtil.send(req, res, 'REGISTER_SUCCESS');
   } catch (error) {
-    ResponseUtil.send(req, res, "INTERNAL_SERVER_ERROR");
+    ResponseUtil.send(req, res, 'INTERNAL_SERVER_ERROR');
   }
 };
 ```
@@ -1205,29 +1755,29 @@ This section covers **Encryption** and **JWT Token Management**.
 
 ### **Usage Examples**
 
-```javascript
-import { EncryptionUtil } from "express-pack";
+```typescript
+import { EncryptionUtil } from 'express-pack';
 
 // Hash a password
-const hashedPassword = await EncryptionUtil.hash({
-  password: "mySecurePassword123!",
+const hashedPassword: string = await EncryptionUtil.hash({
+  password: 'mySecurePassword123!',
   saltRounds: 12, // optional, default 10
 });
 
 // Compare password with hash
-const isValid = await EncryptionUtil.compare({
-  password: "mySecurePassword123!",
+const isValid: boolean = await EncryptionUtil.compare({
+  password: 'mySecurePassword123!',
   hashed: hashedPassword,
 });
 
 // Encrypt a text
-const encryptedText = EncryptionUtil.encrypt({
-  text: "Hello World!",
+const encryptedText: string = EncryptionUtil.encrypt({
+  text: 'Hello World!',
   key: process.env.ENCRYPTION_KEY, // optional, default 32-byte env key
 });
 
 // Decrypt a text
-const decryptedText = EncryptionUtil.decrypt({
+const decryptedText: string = EncryptionUtil.decrypt({
   encryptedText,
   key: process.env.ENCRYPTION_KEY, // optional
 });
@@ -1250,19 +1800,19 @@ const decryptedText = EncryptionUtil.decrypt({
 
 ### **Usage Examples**
 
-```javascript
-import { JWTUtil } from "express-pack";
+```typescript
+import { JWTUtil } from 'express-pack';
 
 // Generate access and refresh tokens
 const { accessToken, refreshToken } = await JWTUtil.generateTokens({
   tokenPayload: {
-    payload: { userId: "123", role: "admin" },
-    JWT_SECRET: process.env.JWT_SECRET,
-    expiresIn: "1h", // optional, default "25m"
+    payload: { userId: '123', role: 'admin' },
+    JWT_SECRET: process.env.JWT_SECRET!,
+    expiresIn: '1h', // optional, default "25m"
   },
   refreshTokenPayload: {
-    expiresIn: "7d",
-    REFRESH_SECRET: process.env.REFRESH_SECRET,
+    expiresIn: '7d',
+    REFRESH_SECRET: process.env.REFRESH_SECRET!,
   }, // optional
   generateRefreshToken: true,
 });
@@ -1270,7 +1820,7 @@ const { accessToken, refreshToken } = await JWTUtil.generateTokens({
 // Verify access token
 const decodedPayload = await JWTUtil.verify({
   token: accessToken,
-  JWT_SECRET: process.env.JWT_SECRET,
+  JWT_SECRET: process.env.JWT_SECRET!,
 });
 
 // Decode token without verification
@@ -1279,14 +1829,14 @@ const tokenInfo = JWTUtil.decode({ token: accessToken });
 // Verify refresh token
 const refreshPayload = await JWTUtil.verifyRefreshToken({
   token: refreshToken,
-  REFRESH_SECRET: process.env.REFRESH_SECRET,
+  REFRESH_SECRET: process.env.REFRESH_SECRET!,
 });
 
 // Refresh access token using a refresh token
 const newTokens = await JWTUtil.refreshAccessToken({
   token: refreshToken,
-  REFRESH_SECRET: process.env.REFRESH_SECRET,
-  JWT_SECRET: process.env.JWT_SECRET,
+  REFRESH_SECRET: process.env.REFRESH_SECRET!,
+  JWT_SECRET: process.env.JWT_SECRET!,
 });
 ```
 
@@ -1319,16 +1869,16 @@ It provides **clean, type-safe functions** to simplify common operations on obje
 
 ### **Usage Examples**
 
-```javascript
-import { LodashHelper } from "express-pack";
+```typescript
+import { LodashHelper } from 'express-pack';
 
 // Get value safely from object
-const user = { name: { first: "John", last: "Doe" } };
-const firstName = LodashHelper.get(user, "name.first"); // "John"
-const middleName = LodashHelper.get(user, "name.middle", "N/A"); // "N/A"
+const user = { name: { first: 'John', last: 'Doe' } };
+const firstName: string = LodashHelper.get(user, 'name.first'); // "John"
+const middleName: string = LodashHelper.get(user, 'name.middle', 'N/A'); // "N/A"
 
 // Set value in object
-LodashHelper.set(user, "name.middle", "Michael");
+LodashHelper.set(user, 'name.middle', 'Michael');
 
 // Merge multiple objects
 const obj1 = { a: 1, b: 2 };
@@ -1339,39 +1889,39 @@ const merged = LodashHelper.merge(obj1, obj2); // { a:1, b:3, c:4 }
 const clonedUser = LodashHelper.cloneDeep(user);
 
 // Check if object or array is empty
-const isEmpty = LodashHelper.isEmpty({}); // true
+const isEmpty: boolean = LodashHelper.isEmpty({}); // true
 
 // Pick and omit object keys
-const picked = LodashHelper.pick(user, ["name.first"]); // { name: { first: "John" } }
-const omitted = LodashHelper.omit(user, ["name.last"]); // { name: { first: "John" } }
+const picked = LodashHelper.pick(user, ['name.first']); // { name: { first: "John" } }
+const omitted = LodashHelper.omit(user, ['name.last']); // { name: { first: "John" } }
 
 // Unique array by key
 const users = [
-  { id: 1, name: "A" },
-  { id: 2, name: "B" },
-  { id: 1, name: "A" },
+  { id: 1, name: 'A' },
+  { id: 2, name: 'B' },
+  { id: 1, name: 'A' },
 ];
-const uniqueUsers = LodashHelper.uniqBy(users, "id");
+const uniqueUsers = LodashHelper.uniqBy(users, 'id');
 
 // Debounce function
-const log = () => console.log("Called");
+const log = () => console.log('Called');
 const debouncedLog = LodashHelper.debounce(log, 500);
 
 // Get value or default
-const age = LodashHelper.getOrDefault(user, "profile.age", 18);
+const age: number = LodashHelper.getOrDefault(user, 'profile.age', 18);
 
 // Check if multiple nested keys exist
-const hasKeys = LodashHelper.hasNestedKeys(user, ["name.first", "name.last"]); // true
+const hasKeys: boolean = LodashHelper.hasNestedKeys(user, ['name.first', 'name.last']); // true
 
 // Deep clone and set a value
 const updatedDeep = LodashHelper.deepCloneAndSet(
   user,
-  "name.middle",
-  "Michael"
+  'name.middle',
+  'Michael'
 );
 
 // Compact object (remove null, undefined, or empty strings)
-const compacted = LodashHelper.compactObject({ a: 1, b: null, c: "" }); // { a: 1 }
+const compacted = LodashHelper.compactObject({ a: 1, b: null, c: '' }); // { a: 1 }
 ```
 
 ---
@@ -1416,26 +1966,26 @@ Utilities for **working with business days and holidays**.
 
 #### **Usage**
 
-```javascript
-import { DateUtilBusiness } from "express-pack";
+```typescript
+import { DateUtilBusiness } from 'express-pack';
 
-const date = new Date("2025-10-25");
+const date = new Date('2025-10-25');
 
 // Check if a date is a business day
-const isBusiness = DateUtilBusiness.isBusinessDay(date);
+const isBusiness: boolean = DateUtilBusiness.isBusinessDay(date);
 
 // Get the next business day
-const nextBusiness = DateUtilBusiness.nextBusinessDay(date);
+const nextBusiness: Date = DateUtilBusiness.nextBusinessDay(date);
 
 // Add N business days
-const newDate = DateUtilBusiness.addBusinessDays(date, 5);
+const newDate: Date = DateUtilBusiness.addBusinessDays(date, 5);
 
 // Check for holidays
-const holidays = [new Date("2025-10-31")];
-const isHoliday = DateUtilBusiness.isHoliday(date, holidays);
+const holidays: Date[] = [new Date('2025-10-31')];
+const isHoliday: boolean = DateUtilBusiness.isHoliday(date, holidays);
 
 // Get Nth weekday of a month (e.g., 2nd Tuesday of October 2025)
-const secondTuesday = DateUtilBusiness.getNthWeekdayInMonth(2, 2, 9, 2025); // month is 0-based
+const secondTuesday: Date = DateUtilBusiness.getNthWeekdayInMonth(2, 2, 9, 2025); // month is 0-based
 ```
 
 ---
@@ -1446,22 +1996,22 @@ Utilities for **comparing dates at different granularities**.
 
 #### **Usage**
 
-```javascript
-import { DateUtilCompare } from "express-pack";
+```typescript
+import { DateUtilCompare } from 'express-pack';
 
-const date1 = new Date("2025-10-25T10:00:00");
-const date2 = new Date("2025-10-25T15:00:00");
+const date1 = new Date('2025-10-25T10:00:00');
+const date2 = new Date('2025-10-25T15:00:00');
 
 // Compare dates
-const before = DateUtilCompare.isBefore(date1, date2, "hour");
-const after = DateUtilCompare.isAfter(date2, date1, "day");
-const same = DateUtilCompare.isSame(date1, date2, "day");
+const before: boolean = DateUtilCompare.isBefore(date1, date2, 'hour');
+const after: boolean = DateUtilCompare.isAfter(date2, date1, 'day');
+const same: boolean = DateUtilCompare.isSame(date1, date2, 'day');
 
 // Compare numerically
-const cmp = DateUtilCompare.compare(date1, date2);
+const cmp: number = DateUtilCompare.compare(date1, date2);
 
 // Check if date is between two others
-const between = DateUtilCompare.isBetween(date1, date2, new Date("2025-10-26"));
+const between: boolean = DateUtilCompare.isBetween(date1, date2, new Date('2025-10-26'));
 ```
 
 ---
@@ -1472,32 +2022,32 @@ Create dates from **strings, ISO, Unix timestamps, parts, or timezone-aware inpu
 
 #### **Usage**
 
-```javascript
-import { DateUtilCreate } from "express-pack";
+```typescript
+import { DateUtilCreate } from 'express-pack';
 
 // Create from formatted string
-const dt1 = DateUtilCreate.create({
-  value: "25-10-2025",
-  format: "dd-MM-yyyy",
+const dt1: Date = DateUtilCreate.create({
+  value: '25-10-2025',
+  format: 'dd-MM-yyyy',
 });
 
 // Current timestamp in timezone
-const now = DateUtilCreate.now("Asia/Kolkata");
+const now: Date = DateUtilCreate.now('Asia/Kolkata');
 
 // From Unix timestamp
-const fromUnix = DateUtilCreate.fromUnix(1740000000);
+const fromUnix: Date = DateUtilCreate.fromUnix(1740000000);
 
 // From ISO string
-const fromISO = DateUtilCreate.fromISOString("2025-10-25T10:00:00Z");
+const fromISO: Date = DateUtilCreate.fromISOString('2025-10-25T10:00:00Z');
 
 // From parts
-const fromParts = DateUtilCreate.fromParts({
+const fromParts: Date = DateUtilCreate.fromParts({
   year: 2025,
   month: 10,
   day: 25,
   hour: 10,
   minute: 30,
-  timezone: "UTC",
+  timezone: 'UTC',
 });
 ```
 
@@ -1509,24 +2059,24 @@ Calculate **differences, durations, weekdays, and relative times**.
 
 #### **Usage**
 
-```javascript
-import { DateUtilDuration } from "express-pack";
+```typescript
+import { DateUtilDuration } from 'express-pack';
 
-const start = new Date("2025-10-25T10:00:00");
-const end = new Date("2025-10-27T15:30:00");
+const start = new Date('2025-10-25T10:00:00');
+const end = new Date('2025-10-27T15:30:00');
 
 // Difference in days or hours
-const diffDays = DateUtilDuration.diff(start, end, "days");
-const diffHoursFloat = DateUtilDuration.diff(start, end, "hours", true);
+const diffDays: number = DateUtilDuration.diff(start, end, 'days');
+const diffHoursFloat: number = DateUtilDuration.diff(start, end, 'hours', true);
 
 // Breakdown duration into days, hours, minutes, seconds
 const breakdown = DateUtilDuration.duration(start, end);
 
 // Relative time from now
-const fromNowStr = DateUtilDuration.fromNow(start);
+const fromNowStr: string = DateUtilDuration.fromNow(start);
 
 // Count weekdays between two dates
-const weekdays = DateUtilDuration.countWeekdays(start, end);
+const weekdays: number = DateUtilDuration.countWeekdays(start, end);
 ```
 
 ---
@@ -1537,26 +2087,26 @@ Handle **invalid dates, fallback, ambiguous DST, min/max dates**.
 
 #### **Usage**
 
-```javascript
-import { DateUtilEdgeCase } from "express-pack";
+```typescript
+import { DateUtilEdgeCase } from 'express-pack';
 
-const invalidDate = new Date("invalid");
+const invalidDate = new Date('invalid');
 
 // Fallback for invalid date
-const safeDate = DateUtilEdgeCase.handleInvalidFallback(
+const safeDate: Date = DateUtilEdgeCase.handleInvalidFallback(
   invalidDate,
   new Date()
 );
 
 // Normalize any input to Date
-const normalized = DateUtilEdgeCase.normalizeDateInput("2025-10-25");
+const normalized: Date = DateUtilEdgeCase.normalizeDateInput('2025-10-25');
 
 // Maximum and minimum dates
-const maxDate = DateUtilEdgeCase.getMaxDate(new Date(), new Date("2025-12-31"));
-const minDate = DateUtilEdgeCase.getMinDate(new Date(), new Date("2025-01-01"));
+const maxDate: Date = DateUtilEdgeCase.getMaxDate(new Date(), new Date('2025-12-31'));
+const minDate: Date = DateUtilEdgeCase.getMinDate(new Date(), new Date('2025-01-01'));
 
 // Check ambiguous DST
-const isDSTAmbiguous = DateUtilEdgeCase.isAmbiguousDST(new Date());
+const isDSTAmbiguous: boolean = DateUtilEdgeCase.isAmbiguousDST(new Date());
 ```
 
 ---
@@ -1567,28 +2117,28 @@ Format and convert dates to **ISO, Unix, JSON, locale strings, and offsets**.
 
 #### **Usage**
 
-```javascript
-import { DateUtilFormat } from "express-pack";
+```typescript
+import { DateUtilFormat } from 'express-pack';
 
-const date = new Date("2025-10-25T10:00:00");
+const date = new Date('2025-10-25T10:00:00');
 
 // Custom format
-const formatted = DateUtilFormat.formatDate(date, "dd/MM/yyyy HH:mm");
+const formatted: string = DateUtilFormat.formatDate(date, 'dd/MM/yyyy HH:mm');
 
 // ISO string
-const iso = DateUtilFormat.toISOString(date);
+const iso: string = DateUtilFormat.toISOString(date);
 
 // Unix timestamp
-const unix = DateUtilFormat.toUnix(date);
+const unix: number = DateUtilFormat.toUnix(date);
 
 // JSON string
-const jsonStr = DateUtilFormat.toJSON(date);
+const jsonStr: string = DateUtilFormat.toJSON(date);
 
 // Locale string
-const localeStr = DateUtilFormat.toLocaleString(date, "en-GB");
+const localeStr: string = DateUtilFormat.toLocaleString(date, 'en-GB');
 
 // Timezone offset
-const offset = DateUtilFormat.getOffset(date);
+const offset: number = DateUtilFormat.getOffset(date);
 ```
 
 ---
@@ -1599,24 +2149,24 @@ Add, subtract, set, or clone dates; get **start or end of units**.
 
 #### **Usage**
 
-```javascript
-import { DateUtilManipulate } from "express-pack";
+```typescript
+import { DateUtilManipulate } from 'express-pack';
 
-const date = new Date("2025-10-25T10:00:00");
+const date = new Date('2025-10-25T10:00:00');
 
 // Add/subtract time units
-const nextWeek = DateUtilManipulate.add(date, 1, "weeks");
-const prevMonth = DateUtilManipulate.subtract(date, 1, "months");
+const nextWeek: Date = DateUtilManipulate.add(date, 1, 'weeks');
+const prevMonth: Date = DateUtilManipulate.subtract(date, 1, 'months');
 
 // Set specific parts
-const setYearDate = DateUtilManipulate.set(date, "year", 2030);
+const setYearDate: Date = DateUtilManipulate.set(date, 'year', 2030);
 
 // Start/end of units
-const startOfMonth = DateUtilManipulate.startOf(date, "month");
-const endOfYear = DateUtilManipulate.endOf(date, "year");
+const startOfMonth: Date = DateUtilManipulate.startOf(date, 'month');
+const endOfYear: Date = DateUtilManipulate.endOf(date, 'year');
 
 // Clone date
-const clone = DateUtilManipulate.clone(date);
+const clone: Date = DateUtilManipulate.clone(date);
 ```
 
 ---
@@ -1627,28 +2177,28 @@ Work with **date ranges**, chunk ranges, intersect or merge.
 
 #### **Usage**
 
-```javascript
-import { DateUtilsRange } from "express-pack";
+```typescript
+import { DateUtilsRange } from 'express-pack';
 
-const start = new Date("2025-10-01");
-const end = new Date("2025-10-31");
+const start = new Date('2025-10-01');
+const end = new Date('2025-10-31');
 
 // Get all dates in range
-const range = DateUtilsRange.getDateRange(start, end);
+const range: Date[] = DateUtilsRange.getDateRange(start, end);
 
 // Chunk by unit
-const weeks = DateUtilsRange.chunkBy(range, "week");
+const weeks = DateUtilsRange.chunkBy(range, 'week');
 
 // Check intersection of ranges
 const intersect = DateUtilsRange.intersectRanges(
   [start, end],
-  [new Date("2025-10-15"), new Date("2025-11-01")]
+  [new Date('2025-10-15'), new Date('2025-11-01')]
 );
 
 // Merge multiple ranges
 const merged = DateUtilsRange.mergeRanges([
-  [start, new Date("2025-10-10")],
-  [new Date("2025-10-05"), end],
+  [start, new Date('2025-10-10')],
+  [new Date('2025-10-05'), end],
 ]);
 ```
 
@@ -1660,25 +2210,25 @@ Convert dates to **different timezones, get offsets, and localized strings**.
 
 #### **Usage**
 
-```javascript
-import { DateUtilTimezone } from "express-pack";
+```typescript
+import { DateUtilTimezone } from 'express-pack';
 
 const date = new Date();
 
 // Convert to timezone
-const indiaTime = DateUtilTimezone.convertToTZ(date, "Asia/Kolkata");
+const indiaTime: Date = DateUtilTimezone.convertToTZ(date, 'Asia/Kolkata');
 
 // Current timezone
-const tz = DateUtilTimezone.getTimezone();
+const tz: string = DateUtilTimezone.getTimezone();
 
 // Format with locale
-const localeDate = DateUtilTimezone.withLocale(date, "fr-FR");
+const localeDate: string = DateUtilTimezone.withLocale(date, 'fr-FR');
 
 // Timezone abbreviation
-const tzAbbr = DateUtilTimezone.getTimezoneAbbr(date);
+const tzAbbr: string = DateUtilTimezone.getTimezoneAbbr(date);
 
 // Offset in minutes
-const offsetMinutes = DateUtilTimezone.getTimezoneOffsetMinutes(date);
+const offsetMinutes: number = DateUtilTimezone.getTimezoneOffsetMinutes(date);
 ```
 
 ---
@@ -1689,26 +2239,26 @@ Validate **dates, leap years, DST, weekends, same-day checks**.
 
 #### **Usage**
 
-```javascript
-import { DateUtilValidate } from "express-pack";
+```typescript
+import { DateUtilValidate } from 'express-pack';
 
 // Validate date
-const valid = DateUtilValidate.isValid("2025-10-25");
+const valid: boolean = DateUtilValidate.isValid('2025-10-25');
 
 // Parse date from formats
-const parsed = DateUtilValidate.parseDate("25-10-2025", ["dd-MM-yyyy"]);
+const parsed: Date | null = DateUtilValidate.parseDate('25-10-2025', ['dd-MM-yyyy']);
 
 // Leap year check
-const leap = DateUtilValidate.isLeapYear(2024);
+const leap: boolean = DateUtilValidate.isLeapYear(2024);
 
 // DST and weekend check
-const dst = DateUtilValidate.isDST(new Date());
-const weekend = DateUtilValidate.isWeekend(new Date());
+const dst: boolean = DateUtilValidate.isDST(new Date());
+const weekend: boolean = DateUtilValidate.isWeekend(new Date());
 
 // Same day comparison
-const sameDay = DateUtilValidate.isSameDay(
-  new Date("2025-10-25"),
-  new Date("2025-10-25")
+const sameDay: boolean = DateUtilValidate.isSameDay(
+  new Date('2025-10-25'),
+  new Date('2025-10-25')
 );
 ```
 
@@ -1719,6 +2269,804 @@ const sameDay = DateUtilValidate.isSameDay(
 - Each `DateUtil*` class is **focused and type-safe**, designed for **real-world date handling**, including **business days, duration, ranges, formatting, manipulation, timezones, and validations**.
 - Timezone handling relies on `date-fns-tz` for **accurate conversions**.
 - Edge cases like **invalid dates, ambiguous DST, and leap years** are supported out-of-the-box.
+
+---
+
+---
+
+## ⚡ Performance Optimization
+
+Optimize your **express-pack** application for production workloads with these proven strategies.
+
+### **1. Database Optimization**
+
+#### **Connection Pooling**
+
+Configure Mongoose connection pooling for better performance:
+
+```typescript
+import { Mongoose } from 'express-pack';
+
+await Mongoose.init({
+  uri: process.env.DB_URL!,
+  options: {
+    maxPoolSize: 10,        // Maximum number of connections
+    minPoolSize: 5,          // Minimum number of connections
+    socketTimeoutMS: 45000,  // Close sockets after 45 seconds of inactivity
+    serverSelectionTimeoutMS: 5000, // Timeout for server selection
+    heartbeatFrequencyMS: 10000,    // Heartbeat every 10 seconds
+  },
+});
+```
+
+#### **Indexing Strategies**
+
+Use the `indexManager` plugin for optimal query performance:
+
+```typescript
+const User = ModelBuilder.build({
+  name: 'user',
+  schemaDefinition: userSchema,
+  plugins: {
+    indexManager: {
+      indexes: [
+        // Single field index
+        { field: 'email', type: 1, name: 'idx_email', options: { unique: true } },
+        
+        // Compound index for multi-field queries
+        { field: 'org_id,createdAt', type: '1,-1', name: 'idx_org_created' },
+        
+        // Text index for search
+        { field: 'name,description', type: 'text', name: 'idx_search' },
+      ],
+    },
+  },
+});
+```
+
+#### **Pagination Best Practices**
+
+Always use pagination for list endpoints:
+
+```typescript
+import type { PaginateOptions, PaginateResult } from 'express-pack';
+
+const options: PaginateOptions = {
+  page: 1,
+  limit: 20,  // Keep limits reasonable (10-50)
+  filter: { org_id: tenantId, isActive: true },
+  sort: { createdAt: -1 },
+  select: 'name email createdAt', // Only select needed fields
+};
+
+const result: PaginateResult = await User.paginate(options);
+```
+
+### **2. Caching Strategies**
+
+#### **Redis Caching Patterns**
+
+Implement caching for frequently accessed data:
+
+```typescript
+import { RedisClientService } from 'express-pack';
+
+// Cache-aside pattern
+async function getUser(userId: string) {
+  const cacheKey = `user:${userId}`;
+  
+  // Try cache first
+  const cached = await RedisClientService.get(cacheKey);
+  if (cached) {
+    return JSON.parse(cached);
+  }
+  
+  // Cache miss - fetch from database
+  const user = await User.findById(userId);
+  
+  // Store in cache with TTL
+  await RedisClientService.set(
+    cacheKey,
+    JSON.stringify(user),
+    { expire: 3600 } // 1 hour TTL
+  );
+  
+  return user;
+}
+```
+
+#### **Cache Invalidation**
+
+Implement cache invalidation on updates:
+
+```typescript
+async function updateUser(userId: string, updates: Partial<UserSchemaFields>) {
+  // Update database
+  const user = await User.findByIdAndUpdate(userId, updates, { new: true });
+  
+  // Invalidate cache
+  await RedisClientService.del(`user:${userId}`);
+  
+  return user;
+}
+```
+
+#### **TTL Recommendations**
+
+- **Static data**: 24 hours (86400 seconds)
+- **User profiles**: 1 hour (3600 seconds)
+- **Session data**: 30 minutes (1800 seconds)
+- **API responses**: 5 minutes (300 seconds)
+- **Real-time data**: 30 seconds or no cache
+
+### **3. Middleware Optimization**
+
+#### **Middleware Ordering**
+
+Order middleware for optimal performance:
+
+```typescript
+import { ExpressPack, ErrorHandler } from 'express-pack';
+import express from 'express';
+
+const app = express();
+
+// 1. Security headers (fast)
+// 2. CORS (fast)
+// 3. Compression (before body parsing)
+// 4. Body parsing
+// 5. Logging
+// 6. Rate limiting
+// 7. Authentication (only on protected routes)
+// 8. Routes
+// 9. Error handlers
+
+await ExpressPack.init({ app, config: appConfig });
+```
+
+#### **Conditional Middleware**
+
+Apply middleware only where needed:
+
+```typescript
+import { AuthMiddleware } from 'express-pack';
+
+// ❌ Bad - applies auth to all routes
+app.use(AuthMiddleware.authenticateUser(authConfig));
+
+// ✅ Good - applies auth only to protected routes
+router.get('/public', publicHandler);
+router.get(
+  '/protected',
+  AuthMiddleware.authenticateUser(authConfig),
+  protectedHandler
+);
+```
+
+### **4. Request/Response Optimization**
+
+#### **Compression**
+
+Enable compression for all responses:
+
+```typescript
+const config: MiddlewareConfig = {
+  compression: {
+    level: 6,           // Balance between speed and compression
+    threshold: 1024,    // Only compress responses > 1KB
+    filter: (req, res) => {
+      // Don't compress if client doesn't support it
+      if (req.headers['x-no-compression']) {
+        return false;
+      }
+      return true;
+    },
+  },
+};
+```
+
+#### **Payload Size Limits**
+
+Set appropriate payload limits:
+
+```typescript
+const config: MiddlewareConfig = {
+  bodyParser: {
+    json: { limit: '10mb' },      // Adjust based on your needs
+    urlencoded: { limit: '10mb', extended: true },
+    raw: { limit: '10mb' },
+  },
+};
+```
+
+#### **Response Streaming**
+
+Use streaming for large responses:
+
+```typescript
+import { AsyncRouteWrapper } from 'express-pack';
+import type { Request, Response } from 'express';
+
+const downloadFile = AsyncRouteWrapper.asyncHandler(
+  async (req: Request, res: Response) => {
+    const fileStream = getFileStream(req.params.fileId);
+    
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'attachment; filename="file.pdf"');
+    
+    fileStream.pipe(res);
+  }
+);
+```
+
+### **5. Monitoring & Profiling**
+
+#### **Performance Metrics**
+
+Track key performance indicators:
+
+```typescript
+import { Logger } from 'express-pack';
+
+// Track response times
+app.use((req, res, next) => {
+  const start = Date.now();
+  
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    Logger.info(`${req.method} ${req.path} - ${duration}ms`);
+    
+    // Alert on slow requests
+    if (duration > 1000) {
+      Logger.warn(`Slow request detected: ${req.method} ${req.path} - ${duration}ms`);
+    }
+  });
+  
+  next();
+});
+```
+
+#### **Memory Leak Detection**
+
+Monitor memory usage:
+
+```typescript
+// Log memory usage periodically
+setInterval(() => {
+  const usage = process.memoryUsage();
+  Logger.info('Memory usage:', {
+    rss: `${Math.round(usage.rss / 1024 / 1024)}MB`,
+    heapUsed: `${Math.round(usage.heapUsed / 1024 / 1024)}MB`,
+    heapTotal: `${Math.round(usage.heapTotal / 1024 / 1024)}MB`,
+  });
+}, 60000); // Every minute
+```
+
+#### **Database Query Profiling**
+
+Enable Mongoose query logging in development:
+
+```typescript
+import mongoose from 'mongoose';
+
+if (process.env.NODE_ENV === 'development') {
+  mongoose.set('debug', (collectionName, method, query, doc) => {
+    Logger.debug(`Mongoose: ${collectionName}.${method}`, { query, doc });
+  });
+}
+```
+
+---
+
+## ✅ Best Practices & Anti-Patterns
+
+### **Configuration Management**
+
+#### **✅ Do's**
+
+```typescript
+// Use environment variables for secrets
+const config = {
+  jwtSecret: process.env.JWT_SECRET!,
+  dbUrl: process.env.DB_URL!,
+};
+
+// Centralize configuration
+// config/index.ts
+export const appConfig = {
+  port: parseInt(process.env.PORT || '3000'),
+  env: process.env.NODE_ENV || 'development',
+};
+
+// Validate configuration at startup
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is required');
+}
+
+// Use TypeScript for type-safe config
+import type { MiddlewareConfig } from 'express-pack';
+const config: MiddlewareConfig = { /* ... */ };
+```
+
+#### **❌ Don'ts**
+
+```typescript
+// ❌ Hardcoding secrets
+const jwtSecret = 'my-secret-key-123';
+
+// ❌ Different config formats across environments
+const config = process.env.NODE_ENV === 'production' 
+  ? require('./prod-config.json')
+  : { /* inline config */ };
+
+// ❌ Not validating configuration
+const port = process.env.PORT; // Could be undefined
+```
+
+### **Error Handling**
+
+#### **✅ Do's**
+
+```typescript
+// Use AsyncRouteWrapper for all async routes
+import { AsyncRouteWrapper, ResponseUtil } from 'express-pack';
+
+router.get('/users', AsyncRouteWrapper.asyncHandler(async (req, res) => {
+  const users = await User.find();
+  ResponseUtil.send(req, res, 'SUCCESS', users);
+}));
+
+// Implement global error handler
+app.use(ErrorHandler.handleGlobalError);
+
+// Log errors with context
+Logger.error('Failed to fetch user', { userId, error: err.message });
+
+// Return consistent error responses
+ResponseUtil.send(req, res, 'INTERNAL_SERVER_ERROR');
+```
+
+#### **❌ Don'ts**
+
+```typescript
+// ❌ Swallowing errors silently
+try {
+  await someOperation();
+} catch (err) {
+  // Silent failure
+}
+
+// ❌ Exposing stack traces to clients
+res.status(500).json({ error: err.stack });
+
+// ❌ Not logging errors
+catch (err) {
+  res.status(500).json({ error: 'Something went wrong' });
+}
+```
+
+### **Authentication & Authorization**
+
+#### **✅ Do's**
+
+```typescript
+// Use JWT with short expiration
+const { accessToken, refreshToken } = await JWTUtil.generateTokens({
+  tokenPayload: {
+    payload: { userId: user.id },
+    JWT_SECRET: process.env.JWT_SECRET!,
+    expiresIn: '15m', // Short-lived access token
+  },
+  refreshTokenPayload: {
+    expiresIn: '7d', // Longer-lived refresh token
+    REFRESH_SECRET: process.env.REFRESH_SECRET!,
+  },
+  generateRefreshToken: true,
+});
+
+// Validate tokens on every request
+router.get('/protected', 
+  AuthMiddleware.authenticateUser(authConfig),
+  handler
+);
+
+// Use RBAC for authorization
+import { authorizeRole } from 'express-pack';
+router.delete('/users/:id',
+  AuthMiddleware.authenticateUser(authConfig),
+  authorizeRole(['admin']),
+  deleteUser
+);
+```
+
+#### **❌ Don'ts**
+
+```typescript
+// ❌ Storing passwords in plain text
+const user = new User({ password: req.body.password });
+
+// ❌ Using weak JWT secrets
+const JWT_SECRET = '12345';
+
+// ❌ Not expiring tokens
+expiresIn: '999y'
+
+// ❌ Not validating tokens
+router.get('/protected', handler); // No auth check
+```
+
+### **Database Operations**
+
+#### **✅ Do's**
+
+```typescript
+// Use connection pooling
+await Mongoose.init({
+  uri: process.env.DB_URL!,
+  options: { maxPoolSize: 10, minPoolSize: 5 },
+});
+
+// Implement soft delete
+plugins: { softDelete: true }
+
+// Use transactions for multi-document operations
+const session = await mongoose.startSession();
+session.startTransaction();
+try {
+  await User.create([newUser], { session });
+  await Wallet.create([newWallet], { session });
+  await session.commitTransaction();
+} catch (err) {
+  await session.abortTransaction();
+  throw err;
+} finally {
+  session.endSession();
+}
+
+// Index frequently queried fields
+plugins: {
+  indexManager: {
+    indexes: [{ field: 'email', type: 1, options: { unique: true } }]
+  }
+}
+```
+
+#### **❌ Don'ts**
+
+```typescript
+// ❌ Not using connection pooling
+// Default settings may not be optimal
+
+// ❌ N+1 query problems
+for (const user of users) {
+  const orders = await Order.find({ userId: user.id }); // N queries
+}
+// ✅ Use populate or aggregation instead
+
+// ❌ Not handling connection errors
+Mongoose.init({ uri: dbUrl }); // No error handling
+```
+
+### **API Design**
+
+#### **✅ Do's**
+
+```typescript
+// Use consistent response format
+ResponseUtil.send(req, res, 'SUCCESS', data);
+
+// Implement pagination
+const result = await User.paginate({ page: 1, limit: 20 });
+
+// Version your APIs
+const routes: RouteGroup[] = [{
+  prefix: '/api',
+  version: '/v1',
+  route: [{ path: '/users', route: userRouter }],
+}];
+
+// Use proper HTTP status codes
+res.status(201).json({ message: 'Created' });
+res.status(404).json({ message: 'Not found' });
+```
+
+#### **❌ Don'ts**
+
+```typescript
+// ❌ Inconsistent response formats
+res.json({ data: users }); // One endpoint
+res.json({ users }); // Another endpoint
+
+// ❌ No pagination
+const users = await User.find(); // Returns all users
+
+// ❌ No API versioning
+router.get('/users', handler); // Breaking changes affect all clients
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### **Issue: "Express app not initialized" error**
+
+**Symptoms:**
+```
+Error: Express app not initialized. Call init() first.
+```
+
+**Cause:** Calling `getApp()` or `getRouter()` before `init()`.
+
+**Solution:**
+```typescript
+// ❌ Wrong order
+const app = ExpressPack.getApp(); // Error!
+await ExpressPack.init({ app, config });
+
+// ✅ Correct order
+const app = express();
+await ExpressPack.init({ app, config });
+const router = ExpressPack.getRouter(); // Now safe
+```
+
+**Prevention:** Always call `init()` before using any ExpressPack features.
+
+---
+
+### **Issue: Validation not working**
+
+**Symptoms:** Request validation is not being applied; invalid data passes through.
+
+**Cause:** Incorrect middleware order or missing validation schema.
+
+**Solution:**
+```typescript
+// ✅ Correct - validation before handler
+router.post(
+  '/users',
+  RequestValidator.validateRequest({ body: userSchema }),
+  AsyncRouteWrapper.asyncHandler(createUser)
+);
+
+// ❌ Wrong - handler before validation
+router.post(
+  '/users',
+  AsyncRouteWrapper.asyncHandler(createUser),
+  RequestValidator.validateRequest({ body: userSchema }) // Never reached
+);
+```
+
+**Prevention:** Always place validation middleware before route handlers.
+
+---
+
+### **Issue: Redis connection fails**
+
+**Symptoms:**
+```
+Error: Redis connection failed: ECONNREFUSED 127.0.0.1:6379
+```
+
+**Cause:** Redis server not running or wrong configuration.
+
+**Solution:**
+```typescript
+// Check Redis server is running
+// Windows: redis-server.exe
+// Linux/Mac: redis-server
+
+// Verify configuration
+const config: RedisConfig = {
+  REDIS_HOST: process.env.REDIS_HOST || '127.0.0.1',
+  REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379'),
+  REDIS_PASSWORD: process.env.REDIS_PASSWORD,
+  REDIS_DB: 0,
+};
+
+RedisClientService.enableRedis(true, config);
+
+// Add error handling
+try {
+  await RedisClientService.set('test', 'value');
+} catch (err) {
+  Logger.error('Redis error:', err);
+}
+```
+
+**Prevention:** Always verify external services are running before starting your app.
+
+---
+
+### **Issue: RabbitMQ reconnection loop**
+
+**Symptoms:** Application repeatedly tries to reconnect to RabbitMQ.
+
+**Cause:** Invalid credentials or network issues.
+
+**Solution:**
+```typescript
+// Verify connection string format
+const config: RabbitMQConfig = {
+  enabled: true,
+  uri: 'amqp://username:password@localhost:5672',
+  // Check username, password, host, and port are correct
+};
+
+// Add connection error handling
+try {
+  await RabbitMQService.init(config);
+} catch (err) {
+  Logger.error('RabbitMQ connection failed:', err);
+  // Implement exponential backoff for retries
+}
+```
+
+**Prevention:** Validate connection strings and credentials in configuration.
+
+---
+
+### **Issue: JWT token expired**
+
+**Symptoms:**
+```
+Error: jwt expired
+```
+
+**Cause:** Token TTL too short or system clock skew.
+
+**Solution:**
+```typescript
+// Adjust token expiration
+const { accessToken } = await JWTUtil.generateTokens({
+  tokenPayload: {
+    payload: { userId: user.id },
+    JWT_SECRET: process.env.JWT_SECRET!,
+    expiresIn: '1h', // Increase from default 15m
+  },
+});
+
+// Implement refresh token flow
+const newTokens = await JWTUtil.refreshAccessToken({
+  token: refreshToken,
+  REFRESH_SECRET: process.env.REFRESH_SECRET!,
+  JWT_SECRET: process.env.JWT_SECRET!,
+});
+```
+
+**Prevention:** Implement refresh token rotation for long-lived sessions.
+
+---
+
+### **Issue: CORS errors in browser**
+
+**Symptoms:**
+```
+Access to fetch at 'http://api.example.com' from origin 'http://localhost:3000' 
+has been blocked by CORS policy
+```
+
+**Cause:** Incorrect CORS configuration.
+
+**Solution:**
+```typescript
+const config: MiddlewareConfig = {
+  cors: {
+    origin: process.env.CORS_ORIGIN || '*', // Specify allowed origins
+    credentials: true, // Allow cookies
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  },
+};
+```
+
+**Prevention:** Configure CORS properly for your frontend domain.
+
+---
+
+### **Issue: Request body undefined**
+
+**Symptoms:** `req.body` is `undefined` in route handlers.
+
+**Cause:** Body parser not configured or wrong content-type.
+
+**Solution:**
+```typescript
+// Enable body parser
+const config: MiddlewareConfig = {
+  bodyParser: {
+    json: { limit: '10mb' },
+    urlencoded: { extended: true, limit: '10mb' },
+  },
+};
+
+// Ensure client sends correct Content-Type header
+// Content-Type: application/json
+```
+
+**Prevention:** Always configure body parser in middleware config.
+
+---
+
+### **Issue: Mongoose connection timeout**
+
+**Symptoms:**
+```
+MongooseServerSelectionError: connect ETIMEDOUT
+```
+
+**Cause:** Wrong connection string or network issues.
+
+**Solution:**
+```typescript
+// Verify connection string
+const dbUrl = process.env.DB_URL; // mongodb://localhost:27017/mydb
+
+// Add connection options
+await Mongoose.init({
+  uri: dbUrl!,
+  options: {
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+  },
+});
+
+// Add error handling
+mongoose.connection.on('error', (err) => {
+  Logger.error('MongoDB connection error:', err);
+});
+```
+
+**Prevention:** Test database connectivity before deploying.
+
+---
+
+## 📚 Examples
+
+### **Complete REST API Example**
+
+A full example project demonstrating express-pack features is available in the examples directory:
+
+```
+examples/
+└── rest-api/
+    ├── src/
+    │   ├── config/
+    │   │   ├── appConfig.ts
+    │   │   ├── routeConfig.ts
+    │   │   └── messageConfig.ts
+    │   ├── modules/
+    │   │   └── user/
+    │   │       ├── controller/
+    │   │       ├── router/
+    │   │       └── schema/
+    │   ├── loaders/
+    │   │   └── index.ts
+    │   └── app.ts
+    └── package.json
+```
+
+**Features demonstrated:**
+- TypeScript configuration
+- Multi-tenant setup
+- JWT authentication
+- Request validation with Zod
+- Mongoose models with plugins
+- Redis caching
+- RabbitMQ messaging
+- Cron jobs
+- Error handling
+- API documentation
+
+### **Future Examples**
+
+Additional examples are planned for future releases:
+
+- **GraphQL API**: GraphQL server with express-pack
+- **Microservices**: Multi-service architecture with message queues
+- **Real-time Chat**: WebSocket integration with express-pack
+- **File Upload**: S3 integration for file uploads
+
+**Note:** Example projects will be added in Task 6 of Phase 1.
 
 ---
 
