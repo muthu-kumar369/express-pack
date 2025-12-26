@@ -1,4 +1,4 @@
-import { RouteGroup } from 'express-pack';
+import { RouteGroup } from '@express-pack/core';
 import userRouter from '../modules/user/router/user.router';
 import authRouter from '../modules/auth/router/auth.router';
 

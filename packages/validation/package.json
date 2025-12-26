@@ -1,0 +1,45 @@
+{
+  "name": "@express-pack/validation",
+  "version": "2.0.0",
+  "description": "Request validation utilities with Zod integration for Express",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --clean && tsc --emitDeclarationOnly",
+    "dev": "tsup src/index.ts --format cjs,esm --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.22.4"
+  },
+  "peerDependencies": {
+    "express": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  },
+  "keywords": [
+    "express",
+    "validation",
+    "zod",
+    "request-validation",
+    "middleware"
+  ],
+  "author": "Express Pack Team",
+  "license": "MIT"
+}

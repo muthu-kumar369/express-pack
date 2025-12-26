@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { TimestampPlugin } from 'express-pack';
+import { TimestampPlugin } from '@express-pack/db';
 
 const tenantSchema = new mongoose.Schema({
     name: {

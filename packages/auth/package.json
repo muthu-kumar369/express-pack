@@ -1,0 +1,54 @@
+{
+  "name": "@express-pack/auth",
+  "version": "2.0.0",
+  "description": "Authentication module for express-pack",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "require": "./dist/index.cjs",
+    "import": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --clean && tsc --emitDeclarationOnly",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "keywords": [
+    "express",
+    "auth",
+    "typescript"
+  ],
+  "author": "Muthu Kumar",
+  "license": "ISC",
+  "peerDependencies": {
+    "express": "^4.0.0"
+  },
+  "dependencies": {
+    "@express-pack/core": "^2.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-facebook": "^3.0.0",
+    "passport-github2": "^0.1.12",
+    "bcrypt": "^5.1.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.2",
+    "tsup": "^8.5.0",
+    "typescript": "5.3.3",
+    "vitest": "^1.0.0",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/passport": "^1.0.17",
+    "@types/passport-google-oauth20": "^2.0.16",
+    "@types/passport-facebook": "^3.0.3",
+    "@types/passport-github2": "^1.2.9",
+    "@types/bcrypt": "^5.0.2"
+  }
+}

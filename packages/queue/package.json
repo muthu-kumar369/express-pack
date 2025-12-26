@@ -1,0 +1,44 @@
+{
+  "name": "@express-pack/queue",
+  "version": "2.0.0",
+  "description": "queue module for express-pack",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "require": "./dist/index.cjs",
+    "import": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --clean && tsc --emitDeclarationOnly",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "keywords": [
+    "express",
+    "queue",
+    "typescript"
+  ],
+  "author": "Muthu Kumar",
+  "license": "ISC",
+  "peerDependencies": {
+    "express": "^4.0.0"
+  },
+  "dependencies": {
+    "@express-pack/core": "^2.0.0",
+    "amqplib": "^0.10.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.2",
+    "tsup": "^8.5.0",
+    "typescript": "5.3.3",
+    "vitest": "^1.0.0",
+    "@types/amqplib": "^0.10.5"
+  }
+}

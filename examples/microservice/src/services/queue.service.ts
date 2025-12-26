@@ -1,4 +1,4 @@
-import { RabbitMQService } from 'express-pack';
+import { RabbitMQService } from '@express-pack/queue';
 import { EmailService } from './email.service';
 
 export class QueueService {

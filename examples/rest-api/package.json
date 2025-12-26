@@ -10,7 +10,11 @@
     "test": "jest",
     "lint": "eslint src/**/*.ts"
   },
-  "keywords": ["express-pack", "rest-api", "example"],
+  "keywords": [
+    "express-pack",
+    "rest-api",
+    "example"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -19,7 +23,18 @@
     "mongoose": "^8.0.0",
     "zod": "^3.22.0",
     "dotenv": "^16.3.1",
-    "ioredis": "^5.3.2"
+    "ioredis": "^5.3.2",
+    "@express-pack/core": "^2.0.0",
+    "@express-pack/auth": "^2.0.0",
+    "@express-pack/validation": "^2.0.0",
+    "@express-pack/cache": "^2.0.0",
+    "@express-pack/queue": "^2.0.0",
+    "@express-pack/scheduler": "^2.0.0",
+    "@express-pack/email": "^2.0.0",
+    "@express-pack/storage": "^2.0.0",
+    "@express-pack/payment": "^2.0.0",
+    "@express-pack/db": "^2.0.0",
+    "@express-pack/utils": "^2.0.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

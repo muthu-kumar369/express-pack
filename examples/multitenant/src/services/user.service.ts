@@ -1,5 +1,6 @@
 import { User } from '../models/user.model';
-import { EncryptionUtil, RedisClientService } from 'express-pack';
+import { EncryptionUtil } from '@express-pack/utils';
+import { RedisClientService } from '@express-pack/cache';
 
 export class UserService {
     /**

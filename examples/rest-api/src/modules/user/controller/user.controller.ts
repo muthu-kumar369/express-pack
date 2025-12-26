@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { UserService } from '../service/user.service';
-import { ResponseUtil } from 'express-pack';
+import { ResponseUtil } from '@express-pack/utils';
 
 export class UserController {
     /**

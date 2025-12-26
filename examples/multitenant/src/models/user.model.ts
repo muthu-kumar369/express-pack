@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { SoftDeletePlugin, TimestampPlugin } from 'express-pack';
+import { SoftDeletePlugin, TimestampPlugin } from '@express-pack/db';
 
 const userSchema = new mongoose.Schema({
     tenantId: {

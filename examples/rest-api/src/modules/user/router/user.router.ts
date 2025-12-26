@@ -1,4 +1,6 @@
-import { ExpressPack, RequestValidator, AuthMiddleware, AsyncRouteWrapper } from 'express-pack';
+import { ExpressPack, AsyncRouteWrapper } from '@express-pack/core';
+import { RequestValidator } from '@express-pack/validation';
+import { AuthMiddleware } from '@express-pack/auth';
 import { z } from 'zod';
 import { UserController } from '../controller/user.controller';
 

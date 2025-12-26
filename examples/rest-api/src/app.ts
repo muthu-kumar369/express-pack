@@ -1,6 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { ExpressPack, RedisClientService } from 'express-pack';
+import { ExpressPack } from '@express-pack/core';
+import { RedisClientService } from '@express-pack/cache';
 import { config } from 'dotenv';
 import { appConfig } from './config/app.config';
 import { routeConfig } from './config/route.config';
@@ -17,11 +18,10 @@ async function startServer() {
         await mongoose.connect(process.env.DB_URL!);
         console.log('✅ Connected to MongoDB');
 
-        // Initialize Redis
-        await RedisClientService.init({
-            enabled: true,
-            host: process.env.REDIS_HOST || 'localhost',
-            port: parseInt(process.env.REDIS_PORT || '6379'),
+        // Initialize Redis (Updated for v2)
+        RedisClientService.enableRedis(true, {
+            REDIS_HOST: process.env.REDIS_HOST || 'localhost',
+            REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379'),
         });
         console.log('✅ Connected to Redis');
 

@@ -1,6 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { ExpressPack, RedisClientService } from 'express-pack';
+import { ExpressPack } from '@express-pack/core';
+import { RedisClientService } from '@express-pack/cache';
 import { config } from 'dotenv';
 import { tenantMiddleware } from './middleware/tenant.middleware';
 import { usageTrackingMiddleware } from './middleware/usage-tracking.middleware';

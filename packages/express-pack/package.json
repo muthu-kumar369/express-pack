@@ -1,0 +1,49 @@
+{
+  "name": "express-pack",
+  "version": "2.0.0",
+  "description": "All-in-one package for express-pack - includes all @express-pack/* packages",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "require": "./dist/index.cjs",
+    "import": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --clean && tsc --emitDeclarationOnly",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "express",
+    "typescript",
+    "express-pack"
+  ],
+  "author": "Muthu Kumar",
+  "license": "ISC",
+  "dependencies": {
+    "@express-pack/core": "^2.0.0",
+    "@express-pack/auth": "^2.0.0",
+    "@express-pack/validation": "^2.0.0",
+    "@express-pack/queue": "^2.0.0",
+    "@express-pack/cache": "^2.0.0",
+    "@express-pack/scheduler": "^2.0.0",
+    "@express-pack/email": "^2.0.0",
+    "@express-pack/payment": "^2.0.0",
+    "@express-pack/storage": "^2.0.0",
+    "@express-pack/db": "^2.0.0",
+    "@express-pack/utils": "^2.0.0",
+    "@express-pack/testing": "^2.0.0",
+    "@express-pack/cli": "^2.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "5.3.3",
+    "vitest": "^1.0.0"
+  }
+}

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { UserService } from '../../user/service/user.service';
-import { JWTUtil, ResponseUtil } from 'express-pack';
+import { JWTUtil } from '@express-pack/auth';
+import { ResponseUtil } from '@express-pack/utils';
 
 export class AuthController {
     /**

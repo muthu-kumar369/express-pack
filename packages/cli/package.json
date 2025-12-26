@@ -1,0 +1,47 @@
+{
+  "name": "@express-pack/cli",
+  "version": "2.0.0",
+  "description": "CLI for express-pack",
+  "type": "module",
+  "bin": {
+    "express-pack": "./dist/index.cjs"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "require": "./dist/index.cjs",
+    "import": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --clean && tsc --emitDeclarationOnly",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "express",
+    "cli",
+    "typescript"
+  ],
+  "author": "Muthu Kumar",
+  "license": "ISC",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "execa": "^8.0.1",
+    "fs-extra": "^11.2.0",
+    "inquirer": "^9.2.14",
+    "ora": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^9.0.7",
+    "tsup": "^8.5.0",
+    "typescript": "5.3.3",
+    "vitest": "^1.0.0"
+  }
+}

@@ -1,601 +1,301 @@
-# Migration Guide: v1.x → v2.0.0
+# Migration Guide: express-pack v1 → v2
 
-## 📋 Table of Contents
+## Overview
 
-1. [Overview](#overview)
-2. [Breaking Changes](#breaking-changes)
-3. [Step-by-Step Migration](#step-by-step-migration)
-4. [Automated Migration Tool](#automated-migration-tool)
-5. [Common Issues & Solutions](#common-issues--solutions)
-6. [Rollback Instructions](#rollback-instructions)
-7. [Getting Help](#getting-help)
+Express-pack v2 introduces a **modular package architecture** that allows you to install only the packages you need, reducing bundle sizes and improving tree-shaking.
 
 ---
 
-## 🎯 Overview
+## Breaking Changes
 
-### Why Upgrade to v2.0.0?
+### 1. Package Structure
 
-express-pack v2.0.0 is a major rewrite that brings:
-
-- ✅ **Full TypeScript Support** - Better type safety and IDE autocomplete
-- ✅ **ESM Modules** - Modern JavaScript module system
-- ✅ **Improved API Design** - More consistent and intuitive APIs
-- ✅ **Better Documentation** - Comprehensive JSDoc and TypeDoc
-- ✅ **New Features** - Enhanced validation, authentication, and utilities
-- ✅ **Performance Improvements** - Optimized middleware and caching
-
-### What's New in v2.0.0?
-
-- **TypeScript-first** - Written entirely in TypeScript
-- **ESM modules** - Uses `import/export` instead of `require`
-- **Async initialization** - `ExpressPack.init()` now returns a Promise
-- **Object-based parameters** - Better extensibility and readability
-- **Zod validation** - Type-safe request validation
-- **Comprehensive JSDoc** - Full API documentation
-- **New utilities** - Date utilities, enhanced encryption, JWT helpers
-
-### Who Should Upgrade?
-
-- ✅ Projects using Node.js 16+
-- ✅ Projects ready to adopt ESM
-- ✅ Projects wanting TypeScript support
-- ✅ Projects needing better type safety
-
-### Estimated Migration Time
-
-- **Small projects** (< 10 routes): 30 minutes - 1 hour
-- **Medium projects** (10-50 routes): 2-4 hours
-- **Large projects** (50+ routes): 1 day
-
----
-
-## 💥 Breaking Changes
-
-### 1. Module System: CommonJS → ESM
-
-**v1.x (CommonJS):**
-```javascript
-const { ExpressPack } = require('express-pack');
+**v1 (Monolithic):**
+```bash
+npm install express-pack
 ```
 
-**v2.0.0 (ESM):**
+**v2 (Modular):**
+```bash
+# Install only what you need
+npm install @express-pack/core @express-pack/auth
+
+# OR install everything (backward compatible)
+npm install express-pack
+```
+
+### 2. Import Paths
+
+**v1:**
+```typescript
+import { ExpressPack, JWTUtil, RedisClientService } from 'express-pack';
+```
+
+**v2 (Scoped Packages):**
+```typescript
+import { ExpressPack } from '@express-pack/core';
+import { JWTUtil } from '@express-pack/auth';
+import { RedisClientService } from '@express-pack/cache';
+```
+
+**v2 (Facade - Backward Compatible):**
+```typescript
+// Still works! Imports from main package
+import { ExpressPack, JWTUtil, RedisClientService } from 'express-pack';
+```
+
+---
+
+## Package Mapping
+
+| v1 Import | v2 Scoped Package |
+|-----------|-------------------|
+| `ExpressPack`, middleware, error handling | `@express-pack/core` |
+| `JWTUtil`, `AuthMiddleware`, Passport | `@express-pack/auth` |
+| Request validation, Zod | `@express-pack/validation` |
+| `RedisClientService` | `@express-pack/cache` |
+| `RabbitMQService` | `@express-pack/queue` |
+| `CronManager` | `@express-pack/scheduler` |
+| Email services (SendGrid, SES, etc.) | `@express-pack/email` |
+| `S3StorageService` | `@express-pack/storage` |
+| `StripeService` | `@express-pack/payment` |
+| Mongoose connection, plugins | `@express-pack/db` |
+| Date, string, crypto utilities | `@express-pack/utils` |
+| Testing utilities, mocks | `@express-pack/testing` |
+| CLI tools | `@express-pack/cli` |
+
+---
+
+## Migration Strategies
+
+### Strategy 1: Gradual Migration (Recommended)
+
+Keep using the facade package while you migrate:
+
+```typescript
+// Step 1: Keep using facade
+import { ExpressPack, JWTUtil } from 'express-pack';
+
+// Step 2: Gradually switch to scoped packages
+import { ExpressPack } from '@express-pack/core';
+import { JWTUtil } from '@express-pack/auth';
+// import { ... } from 'express-pack'; // Remove unused imports
+
+// Step 3: Uninstall facade when done
+// npm uninstall express-pack
+// npm install @express-pack/core @express-pack/auth
+```
+
+### Strategy 2: Direct Migration
+
+Switch to scoped packages immediately for smaller bundles:
+
+```bash
+# Remove old package
+npm uninstall express-pack
+
+# Install only what you need
+npm install @express-pack/core @express-pack/auth @express-pack/cache
+```
+
+---
+
+## Example Migrations
+
+### Example 1: Basic Express App
+
+**Before (v1):**
 ```typescript
 import { ExpressPack } from 'express-pack';
-```
-
-**Impact:** 🔴 **HIGH** - Affects all imports
-
-**Migration:**
-1. Add `"type": "module"` to `package.json`
-2. Change all `require()` to `import`
-3. Change all `module.exports` to `export`
-4. Use `.js` extension in relative imports
-
----
-
-### 2. ExpressPack Initialization
-
-**v1.x:**
-```javascript
-ExpressPack.init(app, config);
-```
-
-**v2.0.0:**
-```typescript
-await ExpressPack.init({ app, config });
-```
-
-**Changes:**
-- ✅ Now returns a Promise (requires `await`)
-- ✅ Parameters wrapped in object `{ app, config }`
-- ✅ Better extensibility for future options
-
-**Impact:** 🔴 **HIGH** - Affects app initialization
-
-**Migration:**
-```typescript
-// Before
-ExpressPack.init(app, config);
-
-// After
-await ExpressPack.init({ app, config });
-
-// Or in non-async context
-ExpressPack.init({ app, config }).then(() => {
-  // App initialized
-});
-```
-
----
-
-### 3. Configuration Format
-
-**v1.x:**
-```javascript
-const config = {
-  cors: true,
-  bodyParser: true,
-  logger: true,
-};
-```
-
-**v2.0.0:**
-```typescript
-const config: MiddlewareConfig = {
-  cors: { origin: '*' },
-  bodyParser: { json: { limit: '10mb' } },
-  logger: { level: 'info' },
-};
-```
-
-**Changes:**
-- ❌ Boolean values no longer accepted
-- ✅ Must provide configuration objects
-- ✅ More granular control over middleware
-
-**Impact:** 🟡 **MEDIUM** - Affects middleware configuration
-
-**Migration:**
-```typescript
-// Before
-const config = {
-  cors: true,
-  bodyParser: true,
-};
-
-// After
-const config = {
-  cors: {},  // Use defaults
-  bodyParser: {},  // Use defaults
-  // Or with custom options
-  cors: { origin: '*', credentials: true },
-  bodyParser: { json: { limit: '10mb' } },
-};
-```
-
----
-
-### 4. TypeScript Required for Type Safety
-
-**v1.x:**
-- JavaScript-only
-- No type definitions
-
-**v2.0.0:**
-- TypeScript-first
-- Full type definitions included
-- Optional: Can still use JavaScript
-
-**Impact:** 🟢 **LOW** - Optional but recommended
-
-**Migration:**
-```bash
-# Install TypeScript (if using)
-npm install --save-dev typescript @types/node @types/express
-
-# Create tsconfig.json
-npx tsc --init
-```
-
----
-
-### 5. Request Validation with Zod
-
-**v1.x:**
-- Manual validation
-- No built-in schema validation
-
-**v2.0.0:**
-```typescript
-import { RequestValidator, z } from 'express-pack';
-
-router.post('/users',
-  RequestValidator.validateRequest({
-    body: z.object({
-      name: z.string().min(2),
-      email: z.string().email()
-    })
-  }),
-  createUser
-);
-```
-
-**Impact:** 🟢 **LOW** - New feature, not breaking
-
----
-
-### 6. Peer Dependencies
-
-**v1.x:**
-- Express bundled as dependency
-
-**v2.0.0:**
-- Express as peer dependency
-- Must install Express separately
-
-**Impact:** 🟡 **MEDIUM** - Affects installation
-
-**Migration:**
-```bash
-# Ensure Express is installed
-npm install express@^4.0.0
-```
-
----
-
-### 7. File Extensions in Imports
-
-**v1.x:**
-```javascript
-const helper = require('./utils/helper');
-```
-
-**v2.0.0:**
-```typescript
-import { helper } from './utils/helper.js';  // Note .js extension
-```
-
-**Impact:** 🟡 **MEDIUM** - Affects relative imports
-
----
-
-## 📝 Step-by-Step Migration
-
-### Prerequisites
-
-Before starting, ensure you have:
-- ✅ Node.js 16+ installed
-- ✅ Git repository with committed changes
-- ✅ Backup of your project
-- ✅ Test suite to verify functionality
-
-### Step 1: Backup Your Project
-
-```bash
-# Create a git branch for migration
-git checkout -b migrate-to-v2
-
-# Or create a backup
-cp -r . ../my-project-backup
-```
-
-### Step 2: Update package.json
-
-```json
-{
-  "type": "module",
-  "dependencies": {
-    "express": "^4.0.0",
-    "express-pack": "^2.0.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^22.0.0",
-    "@types/express": "^5.0.0"
-  }
-}
-```
-
-### Step 3: Install Dependencies
-
-```bash
-npm install
-```
-
-### Step 4: Convert Imports to ESM
-
-**Before:**
-```javascript
-const express = require('express');
-const { ExpressPack } = require('express-pack');
-```
-
-**After:**
-```typescript
 import express from 'express';
-import { ExpressPack } from 'express-pack';
-```
 
-### Step 5: Update File Extensions
-
-Rename files if needed:
-```bash
-# If using TypeScript
-mv app.js app.ts
-mv routes/users.js routes/users.ts
-
-# If staying with JavaScript, ensure .js extension in imports
-```
-
-### Step 6: Update ExpressPack Initialization
-
-**Before:**
-```javascript
 const app = express();
-ExpressPack.init(app, config);
-```
 
-**After:**
-```typescript
-const app = express();
-await ExpressPack.init({ app, config });
-```
-
-### Step 7: Update Configuration
-
-**Before:**
-```javascript
-const config = {
-  cors: true,
-  bodyParser: true,
-};
-```
-
-**After:**
-```typescript
-const config = {
-  cors: {},
-  bodyParser: {},
-};
-```
-
-### Step 8: Update Relative Imports
-
-Add `.js` extension to all relative imports:
-
-**Before:**
-```javascript
-import { helper } from './utils/helper';
-```
-
-**After:**
-```typescript
-import { helper } from './utils/helper.js';
-```
-
-### Step 9: Test Your Application
-
-```bash
-# Run tests
-npm test
-
-# Start development server
-npm run dev
-
-# Check for errors and warnings
-```
-
-### Step 10: Update Documentation
-
-- Update your project's README
-- Update API documentation
-- Update deployment scripts
-- Inform team members
-
----
-
-## 🤖 Automated Migration Tool
-
-We provide a migration script to automate common changes:
-
-### Installation
-
-```bash
-# Download migration script
-curl -o migrate.js https://raw.githubusercontent.com/muthu-kumar369/express-pack/main/scripts/migrate-v1-to-v2.js
-
-# Or copy from this repository
-cp node_modules/express-pack/scripts/migrate-v1-to-v2.js ./
-```
-
-### Usage
-
-```bash
-# Dry run (preview changes)
-node migrate.js --dry-run
-
-# Run migration
-node migrate.js
-
-# With backup
-node migrate.js --backup
-```
-
-### What It Does Automatically
-
-- ✅ Updates `package.json` (adds `"type": "module"`)
-- ✅ Converts `require()` to `import`
-- ✅ Updates `ExpressPack.init()` calls
-- ✅ Adds `.js` extensions to relative imports
-- ✅ Creates backup before changes
-
-### What Requires Manual Intervention
-
-- ⚠️ Configuration object updates
-- ⚠️ Custom middleware changes
-- ⚠️ Complex import patterns
-- ⚠️ TypeScript configuration
-
----
-
-## 🔧 Common Issues & Solutions
-
-### Issue 1: "Cannot use import statement outside a module"
-
-**Cause:** Missing `"type": "module"` in package.json
-
-**Solution:**
-```json
-{
-  "type": "module"
-}
-```
-
----
-
-### Issue 2: "Error [ERR_MODULE_NOT_FOUND]"
-
-**Cause:** Missing `.js` extension in relative imports
-
-**Solution:**
-```typescript
-// Before
-import { helper } from './utils/helper';
-
-// After
-import { helper } from './utils/helper.js';
-```
-
----
-
-### Issue 3: "ExpressPack.init is not a function"
-
-**Cause:** Incorrect import syntax
-
-**Solution:**
-```typescript
-// Wrong
-import ExpressPack from 'express-pack';
-
-// Correct
-import { ExpressPack } from 'express-pack';
-```
-
----
-
-### Issue 4: "await is only valid in async function"
-
-**Cause:** Using `await` outside async function
-
-**Solution:**
-```typescript
-// Wrap in async function
-async function startServer() {
-  await ExpressPack.init({ app, config });
-  app.listen(3000);
-}
-
-startServer();
-
-// Or use .then()
-ExpressPack.init({ app, config }).then(() => {
-  app.listen(3000);
+ExpressPack.init({
+  app,
+  config: {
+    cors: { origin: '*' },
+    bodyParser: {},
+  },
 });
 ```
 
----
-
-### Issue 5: Configuration not working
-
-**Cause:** Using boolean values instead of objects
-
-**Solution:**
+**After (v2):**
 ```typescript
-// Before
-const config = { cors: true };
+import { ExpressPack } from '@express-pack/core';
+import express from 'express';
 
-// After
-const config = { cors: {} };
+const app = express();
+
+ExpressPack.init({
+  app,
+  config: {
+    cors: { origin: '*' },
+    bodyParser: {},
+  },
+});
+```
+
+### Example 2: Auth + Cache
+
+**Before (v1):**
+```typescript
+import { JWTUtil, RedisClientService } from 'express-pack';
+
+const token = JWTUtil.sign({ userId: '123' }, 'secret');
+await RedisClientService.set('key', 'value');
+```
+
+**After (v2):**
+```typescript
+import { JWTUtil } from '@express-pack/auth';
+import { RedisClientService } from '@express-pack/cache';
+
+const token = JWTUtil.sign({ userId: '123' }, 'secret');
+await RedisClientService.set('key', 'value');
+```
+
+### Example 3: Full Stack App
+
+**Before (v1):**
+```typescript
+import {
+  ExpressPack,
+  JWTUtil,
+  RedisClientService,
+  RabbitMQService,
+  S3StorageService,
+  StripeService,
+} from 'express-pack';
+```
+
+**After (v2 - Scoped):**
+```typescript
+import { ExpressPack } from '@express-pack/core';
+import { JWTUtil } from '@express-pack/auth';
+import { RedisClientService } from '@express-pack/cache';
+import { RabbitMQService } from '@express-pack/queue';
+import { S3StorageService } from '@express-pack/storage';
+import { StripeService } from '@express-pack/payment';
+```
+
+**After (v2 - Facade):**
+```typescript
+// No changes needed! Still works
+import {
+  ExpressPack,
+  JWTUtil,
+  RedisClientService,
+  RabbitMQService,
+  S3StorageService,
+  StripeService,
+} from 'express-pack';
 ```
 
 ---
 
-### Issue 6: TypeScript errors
+## Bundle Size Comparison
 
-**Cause:** Missing type definitions
+### v1 (Monolithic)
+- **Total:** ~500KB (includes everything)
+- **Your app uses only auth?** Still downloads 500KB
 
-**Solution:**
-```bash
-npm install --save-dev @types/node @types/express
+### v2 (Modular)
+- **Core only:** ~33KB
+- **Core + Auth:** ~46KB
+- **Core + Auth + Cache:** ~57KB
+- **All packages (facade):** ~300KB (smaller than v1!)
+
+**Savings:** Up to **90% smaller** bundles when using only what you need!
+
+---
+
+## New Features in v2
+
+### 1. Validation Package
+```typescript
+import { validate, z } from '@express-pack/validation';
+
+const userSchema = z.object({
+  email: z.string().email(),
+  age: z.number().min(18),
+});
+
+app.post('/users', validate({ body: userSchema }), (req, res) => {
+  // req.body is validated and typed!
+});
+```
+
+### 2. Utils Package
+```typescript
+import { formatDate, createSlug, sendSuccess } from '@express-pack/utils';
+
+const slug = createSlug('Hello World'); // 'hello-world'
+const date = formatDate(new Date(), 'yyyy-MM-dd');
+sendSuccess(res, { user }, 'User created');
 ```
 
 ---
 
-## ↩️ Rollback Instructions
+## TypeScript Support
 
-If migration fails, you can rollback:
+All packages include full TypeScript definitions:
 
-### Using Git
-
-```bash
-# Discard all changes
-git checkout .
-
-# Or switch back to previous branch
-git checkout main
-git branch -D migrate-to-v2
-```
-
-### Using Backup
-
-```bash
-# Restore from backup
-rm -rf ./*
-cp -r ../my-project-backup/* ./
-npm install
-```
-
-### Downgrade Package
-
-```bash
-# Reinstall v1.x
-npm install express-pack@^1.0.8
+```typescript
+import type { ExpressPackConfig } from '@express-pack/core';
+import type { JWTPayload } from '@express-pack/auth';
+import type { RedisSetOptions } from '@express-pack/cache';
 ```
 
 ---
 
-## 🆘 Getting Help
+## Testing
 
-### Documentation
+### v1
+```typescript
+import { createTestApp } from 'express-pack/testing';
+```
 
-- 📚 [README](https://github.com/muthu-kumar369/express-pack#readme)
-- 📖 [API Documentation](https://muthu-kumar369.github.io/express-pack/)
-- 📝 [Examples](https://github.com/muthu-kumar369/express-pack/tree/main/examples)
-
-### Support Channels
-
-- 🐛 [GitHub Issues](https://github.com/muthu-kumar369/express-pack/issues)
-- 💬 [Discussions](https://github.com/muthu-kumar369/express-pack/discussions)
-- 📧 Email: support@express-pack.dev
-
-### Reporting Migration Issues
-
-When reporting issues, please include:
-- v1.x version you're migrating from
-- Node.js version
-- Error messages
-- Minimal reproduction code
+### v2
+```typescript
+import { createTestApp } from '@express-pack/testing';
+```
 
 ---
 
-## ✅ Migration Checklist
+## FAQ
 
-Use this checklist to track your progress:
+### Q: Do I have to migrate immediately?
+**A:** No! The facade package (`express-pack`) maintains backward compatibility. Migrate when ready.
 
-- [ ] Created backup/git branch
-- [ ] Updated package.json (`"type": "module"`)
-- [ ] Installed v2.0.0 and dependencies
-- [ ] Converted require() to import
-- [ ] Updated ExpressPack.init() calls
-- [ ] Updated configuration format
-- [ ] Added .js extensions to imports
-- [ ] Tested application
-- [ ] Updated documentation
-- [ ] Deployed to staging
-- [ ] Deployed to production
+### Q: Can I mix scoped packages and the facade?
+**A:** Yes, but not recommended. Choose one approach for consistency.
+
+### Q: Will v1 be supported?
+**A:** v1 will receive critical bug fixes for 6 months. New features only in v2.
+
+### Q: How do I know which packages I need?
+**A:** Check your imports! Each import maps to a specific package (see table above).
+
+### Q: What if I need everything?
+**A:** Use `npm install express-pack` - it includes all packages.
 
 ---
 
-## 🎉 Success!
+## Support
 
-Congratulations on migrating to express-pack v2.0.0! 
+- **Issues:** [GitHub Issues](https://github.com/your-repo/express-pack/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/your-repo/express-pack/discussions)
+- **Documentation:** [docs.express-pack.dev](https://docs.express-pack.dev)
 
-Enjoy the benefits of:
-- ✨ Full TypeScript support
-- ✨ Modern ESM modules
-- ✨ Better type safety
-- ✨ Improved documentation
-- ✨ New features and utilities
+---
 
-**Need help?** Open an issue on [GitHub](https://github.com/muthu-kumar369/express-pack/issues)!
+## Summary
+
+✅ **Backward compatible** - Facade package works like v1  
+✅ **Smaller bundles** - Install only what you need  
+✅ **Better tree-shaking** - Modular architecture  
+✅ **TypeScript first** - Full type definitions  
+✅ **Easy migration** - Gradual or direct migration paths  
+
+**Recommended:** Start with the facade, migrate gradually to scoped packages for optimal bundle sizes.

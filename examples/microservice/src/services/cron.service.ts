@@ -1,4 +1,4 @@
-import { CronManager } from 'express-pack';
+import { CronManager } from '@express-pack/scheduler';
 import { QueueService } from './queue.service';
 
 export class CronService {

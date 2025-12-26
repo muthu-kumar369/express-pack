@@ -1,4 +1,4 @@
-import { MiddlewareConfig } from 'express-pack';
+import { MiddlewareConfig } from '@express-pack/core';
 
 export const appConfig: MiddlewareConfig = {
     cors: {

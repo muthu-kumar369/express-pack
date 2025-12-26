@@ -1,0 +1,47 @@
+{
+  "name": "@express-pack/scheduler",
+  "version": "2.0.0",
+  "description": "scheduler module for express-pack",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "require": "./dist/index.cjs",
+    "import": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --clean && tsc --emitDeclarationOnly",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "keywords": [
+    "express",
+    "scheduler",
+    "typescript"
+  ],
+  "author": "Muthu Kumar",
+  "license": "ISC",
+  "peerDependencies": {
+    "express": "^4.0.0"
+  },
+  "dependencies": {
+    "@express-pack/core": "^2.0.0",
+    "@express-pack/cache": "^2.0.0",
+    "node-cron": "^3.0.3",
+    "redlock": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.2",
+    "tsup": "^8.5.0",
+    "typescript": "5.3.3",
+    "vitest": "^1.0.0",
+    "@types/node": "^22.10.2",
+    "@types/node-cron": "^3.0.11"
+  }
+}

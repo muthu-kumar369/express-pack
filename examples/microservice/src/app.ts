@@ -1,6 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { ExpressPack } from 'express-pack';
+import { ExpressPack } from '@express-pack/core';
 import { config } from 'dotenv';
 import { QueueService } from './services/queue.service';
 import { EmailService } from './services/email.service';
